@@ -1,1 +1,32 @@
-[]
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Login — QalamStudio</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div class="admin-login-container">
+    <div class="admin-login-box">
+      <h2>⚙️ Admin Login</h2>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div style="background:{{ 'rgba(239,68,68,0.1)' if category == 'error' else 'rgba(0,200,150,0.1)' }};border:1px solid {{ 'rgba(239,68,68,0.2)' if category == 'error' else 'rgba(0,200,150,0.2)' }};color:{{ '#ef4444' if category == 'error' else '#00c896' }};padding:0.75rem;border-radius:8px;font-size:0.85rem;margin-bottom:1rem">
+              {{ message }}
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+      <form method="POST" action="{{ url_for('admin_login') }}">
+        <div class="form-group">
+          <input type="password" class="form-input" name="password" placeholder="Enter admin password" autofocus>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%">Login</button>
+      </form>
+      <a href="{{ url_for('landing') }}" class="btn btn-ghost" style="width:100%;margin-top:0.75rem">← Back to Home</a>
+    </div>
+  </div>
+</body>
+</html>

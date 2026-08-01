@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Panel{% endblock %}
+
+{% block content %}
+<section style="padding: 7rem 0 2rem">
+  <div class="container">
+    <div class="admin-header">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem">
+        <div>
+          <h1 style="font-family:'Syne',sans-serif;font-weight:800;color:#ffd700;font-size:1.5rem">⚙️ Admin Panel</h1>
+          <p style="color:var(--text-muted);font-size:0.8rem;margin-top:0.3rem">{{ now.strftime('%d %b %Y, %H:%M') if now else '' }}</p>
+        </div>
+        <a href="{{ url_for('admin_logout') }}" class="btn btn-danger btn-sm">🔓 Logout</a>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-value">{{ fresh }}</div>
+        <div class="kpi-label">🟢 Fresh Keys</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value">{{ used }}</div>
+        <div class="kpi-label">✅ Used Keys</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value">{{ revoked }}</div>
+        <div class="kpi-label">🚫 Revoked</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value">{{ limits.FREE_DAILY_ACTIONS }}</div>
+        <div class="kpi-label">⚡ Free Limit/Day</div>
+      </div>
+    </div>
+
+    <!-- GitHub Status -->
+    <div class="glass-panel mt-3">
+      <h3 style="font-family:'Syne',sans-serif;font-weight:700;color:var(--text-primary);font-size:1rem;margin-bottom:1rem">🔗 GitHub Sync</h3>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem">
+        <span class="status-badge {{ 'status-approved' if gh_token_set else 'status-rejected' }}">GitHub {{ '✓' if gh_token_set else '✗' }}</span>
+        <span class="status-badge {{ 'status-approved' if resend_set else 'status-rejected' }}">Resend {{ '✓' if resend_set else '✗' }}</span>
+        <span class="status-badge {{ 'status-approved' if smtp_set else 'status-rejected' }}">SMTP {{ '✓' if smtp_set else '✗' }}</span>
+        <span class="status-badge {{ 'status-approved' if wa_set else 'status-rejected' }}">WhatsApp {{ '✓' if wa_set else '✗' }}</span>
+        <span class="status-badge {{ 'status-approved' if wapp_set else 'status-rejected' }}">Wappfly {{ '✓' if wapp_set else '✗' }}</span>
+      </div>
+      <button class="btn btn-primary btn-sm" id="test-email-btn">📧 Test Notification</button>
+    </div>
+
+    <!-- License Key Manager -->
+    <div class="glass-panel mt-3">
+      <h3 style="font-family:'Syne',sans-serif;font-weight:700;color:var(--text-primary);font-size:1.2rem;margin-bottom:0.2rem">🔑 License Key Manager</h3>
+      <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:1rem">One-time use keys. Each key can only be activated once.</p>
+      <div style="display:flex;gap:0.75rem;margin-bottom:1.5rem;flex-wrap:wrap">
+        <input type="number" class="form-input" id="key-count" value="1" min="1" max="20" style="width:100px">
+        <button class="btn btn-primary" id="admin-gen-keys">🔑 Generate Keys</button>
+      </div>
+      <div id="generated-keys-list" style="margin-bottom:1.5rem"></div>
+
+      {% if keys %}
+        <div style="max-height: 400px; overflow-y: auto;">
+          {% for key, info in keys.items() %}
+            {% set is_revoked = info.get('revoked', False) %}
+            {% set is_used = info.get('used', False) and not is_revoked %}
+            {% set css = 'revoked' if is_revoked else 'used' if is_used else 'fresh' %}
+            <div class="key-row {{ css }}">
+              <code style="font-size:0.8rem;word-break:break-all">{{ key }}</code>
+              <div style="display:flex;gap:0.5rem;flex-shrink:0">
+                {% if not is_revoked %}
+                  <button class="btn btn-danger btn-sm" data-key-action="revoke" data-key="{{ key }}">🚫 Revoke</button>
+                {% else %}
+                  <button class="btn btn-primary btn-sm" data-key-action="unrevoke" data-key="{{ key }}">✅ Un-revoke</button>
+                {% endif %}
+                <button class="btn btn-danger btn-sm" data-key-action="delete" data-key="{{ key }}">🗑 Delete</button>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p style="color:var(--text-muted);text-align:center;padding:2rem">No keys generated yet.</p>
+      {% endif %}
+    </div>
+
+    <!-- Pricing & Limits -->
+    <div class="glass-panel mt-3">
+      <h3 style="font-family:'Syne',sans-serif;font-weight:700;color:var(--text-primary);font-size:1.2rem;margin-bottom:0.2rem">💰 Pricing & Limits</h3>
+      <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:1rem">Changes save to GitHub instantly.</p>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Free Daily Actions</label>
+          <input type="number" class="form-input" data-limit="FREE_DAILY_ACTIONS" value="{{ limits.FREE_DAILY_ACTIONS }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Pro Price (PKR)</label>
+          <input type="number" class="form-input" data-limit="PRO_PRICE_PKR" value="{{ limits.PRO_PRICE_PKR }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Pro Price Label</label>
+          <input type="text" class="form-input" data-limit="PRO_PRICE_LABEL" value="{{ limits.PRO_PRICE_LABEL }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Free Price Label</label>
+          <input type="text" class="form-input" data-limit="FREE_PRICE_LABEL" value="{{ limits.FREE_PRICE_LABEL }}">
+        </div>
+        <div class="form-group" style="grid-column: 1 / -1">
+          <label class="form-label">Checkout URL</label>
+          <input type="text" class="form-input" data-limit="CHECKOUT_URL" value="{{ limits.CHECKOUT_URL }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Free Features (| separated)</label>
+          <textarea class="form-textarea" data-limit="FREE_FEATURES" rows="3">{{ limits.FREE_FEATURES }}</textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Pro Features (| separated)</label>
+          <textarea class="form-textarea" data-limit="PRO_FEATURES" rows="3">{{ limits.PRO_FEATURES }}</textarea>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="save-limits-btn" style="width:100%;margin-top:1rem">✅ Save to GitHub</button>
+    </div>
+
+    <!-- Blog Manager -->
+    <div class="glass-panel mt-3">
+      <h3 style="font-family:'Syne',sans-serif;font-weight:700;color:var(--text-primary);font-size:1.2rem;margin-bottom:0.2rem">📝 Blog Manager</h3>
+      <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:1rem">{{ posts|length }} total posts</p>
+      {% if posts %}
+        <div style="max-height: 400px; overflow-y: auto;">
+          {% for post in posts %}
+            <div class="key-row" style="justify-content:flex-start;gap:1rem">
+              <span class="status-badge {{ 'status-approved' if post.published else 'status-pending' }}">{{ 'Published' if post.published else 'Draft' }}</span>
+              <span style="color:var(--text-primary);font-size:0.85rem">{{ post.title }}</span>
+              <span style="color:var(--text-muted);font-size:0.75rem;margin-left:auto">{{ post.date }}</span>
+              <div style="display:flex;gap:0.5rem;flex-shrink:0">
+                <button class="btn btn-primary btn-sm" data-blog-action="toggle" data-blog-id="{{ post.id }}">{{ 'Unpublish' if post.published else 'Publish' }}</button>
+                <button class="btn btn-danger btn-sm" data-blog-action="delete" data-blog-id="{{ post.id }}">🗑 Delete</button>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p style="color:var(--text-muted);text-align:center;padding:2rem">No posts yet.</p>
+      {% endif %}
+    </div>
+
+    <!-- Pro Requests -->
+    <div class="glass-panel mt-3">
+      <h3 style="font-family:'Syne',sans-serif;font-weight:700;color:var(--text-primary);font-size:1.2rem;margin-bottom:0.2rem">🚀 Pro Requests</h3>
+      <div style="display:flex;gap:1rem;margin-bottom:1rem">
+        <div class="kpi-card" style="flex:1">
+          <div class="kpi-value" style="color:var(--warning)">{{ pending|length }}</div>
+          <div class="kpi-label">Pending</div>
+        </div>
+        <div class="kpi-card" style="flex:1">
+          <div class="kpi-value" style="color:var(--success)">{{ approved|length }}</div>
+          <div class="kpi-label">Approved</div>
+        </div>
+        <div class="kpi-card" style="flex:1">
+          <div class="kpi-value" style="color:var(--danger)">{{ rejected|length }}</div>
+          <div class="kpi-label">Rejected</div>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab-btn active">Pending ({{ pending|length }})</button>
+        <button class="tab-btn">Approved ({{ approved|length }})</button>
+        <button class="tab-btn">Rejected ({{ rejected|length }})</button>
+      </div>
+
+      <!-- Pending -->
+      <div class="tab-panel active">
+        {% if pending %}
+          {% for req in pending %}
+            <div class="key-row" style="flex-direction:column;align-items:flex-start;gap:0.5rem">
+              <div style="display:flex;align-items:center;gap:0.5rem;width:100%;flex-wrap:wrap">
+                <span class="status-badge status-pending">Pending</span>
+                {% if req.auto_approved %}
+                  <span class="status-badge status-approved" style="background:rgba(0,200,150,0.1);color:#00c896;border-color:rgba(0,200,150,0.2)">⚡ Auto-Approved</span>
+                {% endif %}
+                <strong style="color:var(--text-primary)">{{ req.name }}</strong>
+                <span style="color:var(--text-muted);font-size:0.75rem;margin-left:auto">{{ req.date }}</span>
+              </div>
+              <div style="font-size:0.82rem;color:var(--text-secondary);line-height:1.7">
+                📧 {{ req.email }} · 📱 {{ req.phone or 'N/A' }}<br>
+                💳 {{ req.payment_method or '—' }} · 🧾 {{ req.txn_id or '—' }}<br>
+                🆔 <code>{{ req.id }}</code>
+              </div>
+              <div style="display:flex;gap:0.5rem;width:100%;margin-top:0.5rem">
+                <button class="btn btn-primary btn-sm" data-req-action="approve" data-req-id="{{ req.id }}">🔑 Generate Key & Approve</button>
+                <input type="text" class="form-input" id="manual-key-{{ req.id }}" placeholder="Or enter existing key" style="flex:1;min-width:150px">
+                <button class="btn btn-danger btn-sm" data-req-action="reject" data-req-id="{{ req.id }}">🚫 Reject</button>
+              </div>
+            </div>
+          {% endfor %}
+        {% else %}
+          <p style="color:var(--text-muted);text-align:center;padding:2rem">No pending requests. 🎉</p>
+        {% endif %}
+      </div>
+
+      <!-- Approved -->
+      <div class="tab-panel">
+        {% if approved %}
+          {% for req in approved %}
+            <div class="key-row" style="flex-direction:column;align-items:flex-start;gap:0.5rem">
+              <div style="display:flex;align-items:center;gap:0.5rem;width:100%;flex-wrap:wrap">
+                <span class="status-badge status-approved">Approved</span>
+                {% if req.auto_approved %}
+                  <span class="status-badge" style="background:rgba(0,200,150,0.1);color:#00c896;border-color:rgba(0,200,150,0.2)">⚡ Auto</span>
+                {% endif %}
+                <strong style="color:var(--text-primary)">{{ req.name }}</strong>
+                <span style="color:var(--text-muted);font-size:0.75rem;margin-left:auto">{{ req.approved_date or req.date }}</span>
+              </div>
+              <div style="font-size:0.82rem;color:var(--text-secondary)">
+                📧 {{ req.email }} · 🔑 <code style="color:var(--accent)">{{ req.key_assigned or '—' }}</code>
+              </div>
+              <button class="btn btn-danger btn-sm" data-req-delete="{{ req.id }}">🗑 Delete Record</button>
+            </div>
+          {% endfor %}
+        {% else %}
+          <p style="color:var(--text-muted);text-align:center;padding:2rem">No approved requests yet.</p>
+        {% endif %}
+      </div>
+
+      <!-- Rejected -->
+      <div class="tab-panel">
+        {% if rejected %}
+          {% for req in rejected %}
+            <div class="key-row" style="flex-direction:column;align-items:flex-start;gap:0.5rem">
+              <div style="display:flex;align-items:center;gap:0.5rem;width:100%">
+                <span class="status-badge status-rejected">Rejected</span>
+                <strong style="color:var(--text-primary)">{{ req.name }}</strong>
+                <span style="color:var(--text-muted);font-size:0.75rem;margin-left:auto">{{ req.rejected_date or req.date }}</span>
+              </div>
+              <div style="display:flex;gap:0.5rem;margin-top:0.5rem">
+                <button class="btn btn-primary btn-sm" data-req-action="approve" data-req-id="{{ req.id }}">🔑 Approve Now</button>
+                <button class="btn btn-danger btn-sm" data-req-delete="{{ req.id }}">🗑 Delete</button>
+              </div>
+            </div>
+          {% endfor %}
+        {% else %}
+          <p style="color:var(--text-muted);text-align:center;padding:2rem">No rejected requests.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="mt-3 text-center">
+      <a href="{{ url_for('landing') }}" class="btn btn-ghost">← Back to Home</a>
+    </div>
+  </div>
+</section>
+{% endblock %}
