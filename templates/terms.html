@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Terms of Service{% endblock %}
+
+{% block content %}
+<section style="padding: 7rem 0 2rem">
+  <div class="container" style="max-width: 800px">
+    <h1 class="section-title">📄 Terms of Service</h1>
+    <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:1.5rem">Last updated: June 2025</p>
+    {% for title, body in [
+      ("1. Acceptance", "By using QalamStudio, you agree to these terms."),
+      ("2. Free Plan", "Free users are limited to daily actions. Ads are displayed. Limits may change."),
+      ("3. Pro Plan & License Keys", "Pro license keys are one-time use and non-transferable. Refunds available within 7 days."),
+      ("4. Prohibited Use", "No spam, misinformation, hate speech, or content violating Pakistani law."),
+      ("5. Disclaimer", "AI content may contain errors. Review before publishing. QalamStudio not liable for damages.")
+    ] %}
+    <div class="glass-panel {{ 'mt-2' if not loop.first }}">
+      <h3 style="color:var(--accent);font-size:1rem;margin-bottom:0.5rem">{{ title }}</h3>
+      <p style="color:var(--text-secondary)">{{ body }}</p>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

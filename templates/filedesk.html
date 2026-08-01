@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}FileDesk{% endblock %}
+
+{% block content %}
+<section style="padding: 7rem 0 2rem">
+  <div class="container text-center" style="max-width: 600px">
+    <div style="font-size: 4rem; margin-bottom: 1rem">📁</div>
+    <h1 class="section-title">FileDesk</h1>
+    <p class="section-subtitle" style="margin: 0 auto 2rem">Your file conversion toolkit — Word to PDF, image converters, and more.</p>
+
+    {% if filedsk_url %}
+      <a href="{{ filedsk_url }}" target="_blank" class="btn btn-primary btn-lg">Open FileDesk →</a>
+      <p style="color:var(--text-muted);font-size:0.8rem;margin-top:1rem">Opens in a new tab</p>
+    {% else %}
+      <div class="glass-panel" style="padding: 2rem">
+        <p style="color:var(--text-secondary)">FileDesk URL is not configured yet.</p>
+        <p style="color:var(--text-muted);font-size:0.8rem;margin-top:0.5rem">Add FILEDESK_URL to your environment variables.</p>
+      </div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

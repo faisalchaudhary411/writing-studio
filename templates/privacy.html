@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Privacy Policy{% endblock %}
+
+{% block content %}
+<section style="padding: 7rem 0 2rem">
+  <div class="container" style="max-width: 800px">
+    <h1 class="section-title">🔒 Privacy Policy</h1>
+    <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:1.5rem">Last updated: June 2025</p>
+    <div class="glass-panel">
+      <h3 style="color:var(--accent);font-size:1rem;margin-bottom:0.5rem">Data We Collect</h3>
+      <p style="color:var(--text-secondary);line-height:1.8">
+        • <strong style="color:var(--text-primary)">Usage data:</strong> Hashed (anonymous) IP to enforce daily free limits. Raw IP never stored.<br><br>
+        • <strong style="color:var(--text-primary)">Content:</strong> Text sent to Groq API for processing — not stored by QalamStudio.<br><br>
+        • <strong style="color:var(--text-primary)">License keys:</strong> Stored in browser session only.
+      </p>
+    </div>
+    <div class="glass-panel mt-2">
+      <h3 style="color:var(--accent);font-size:1rem;margin-bottom:0.5rem">Advertising</h3>
+      <p style="color:var(--text-secondary);line-height:1.8">Ads shown to free users via Adsterra. Upgrade to Pro to remove all ads.</p>
+    </div>
+    <div class="glass-panel mt-2">
+      <h3 style="color:var(--accent);font-size:1rem;margin-bottom:0.5rem">Third-Party Services</h3>
+      <p style="color:var(--text-secondary);line-height:1.8">Groq API · LemonSqueezy · Adsterra · GitHub</p>
+    </div>
+  </div>
+</section>
+{% endblock %}

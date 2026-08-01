@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}{{ post.title }}{% endblock %}
+
+{% block content %}
+<section style="padding: 7rem 0 2rem">
+  <div class="container" style="max-width: 800px">
+    <a href="{{ url_for('blog') }}" class="btn btn-ghost btn-sm mb-2">← Back to Blog</a>
+    <span class="blog-category" style="display:inline-block;margin-bottom:1rem;background:rgba(0,200,150,0.1);color:#00c896;border:1px solid rgba(0,200,150,0.2);padding:0.2rem 0.6rem;border-radius:6px;font-size:0.7rem;font-weight:700;text-transform:uppercase">{{ post.category }}</span>
+    <h1 style="font-family:'Syne',sans-serif;font-weight:800;font-size:clamp(1.5rem,4vw,2.5rem);color:var(--text-primary);margin-bottom:0.5rem;line-height:1.2">{{ post.title }}</h1>
+    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:2rem">{{ post.date }}</p>
+    <div class="output-box ltr" style="white-space:pre-wrap;font-size:1rem;line-height:1.9">{{ post.body }}</div>
+  </div>
+</section>
+{% endblock %}

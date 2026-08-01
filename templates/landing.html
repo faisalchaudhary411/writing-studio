@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Hero -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-badge">🖊️ Pakistan's Free AI Writing Studio</div>
+    <h1 class="hero-title">Write in Urdu.<br>Work Smarter.<br>Get Paid Faster.</h1>
+    <p class="hero-subtitle">AI Urdu writer · Freelancer toolkit · Subtitle generator · File converter<br>All free. No signup. No credit card.</p>
+    <div class="hero-actions">
+      <a href="{{ url_for('urdu_writer') }}" class="btn btn-primary btn-lg">✍️ Urdu Writer</a>
+      <a href="{{ url_for('freelancer') }}" class="btn btn-secondary btn-lg">💼 Freelancer</a>
+      <a href="{{ url_for('subtitles') }}" class="btn btn-secondary btn-lg">🎬 Subtitles</a>
+      {% if filedsk_url %}
+      <a href="{{ url_for('filedsk') }}" class="btn btn-secondary btn-lg">📁 FileDesk</a>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<!-- Tools Grid -->
+<section style="padding: 2rem 0 4rem">
+  <div class="container">
+    <div class="card-grid">
+      <a href="{{ url_for('urdu_writer') }}" class="card" style="text-decoration:none">
+        <div class="card-icon">✍️</div>
+        <div class="card-title">Urdu AI Writer</div>
+        <div class="card-desc">Blogs, scripts & captions in natural Pakistani Urdu — not robotic translation.</div>
+        <span class="card-link">Start Writing →</span>
+      </a>
+      <a href="{{ url_for('freelancer') }}" class="card" style="text-decoration:none">
+        <div class="card-icon">💼</div>
+        <div class="card-title">Freelancer Toolkit</div>
+        <div class="card-desc">Proposals, invoices & client emails that win projects on Fiverr, Upwork & beyond.</div>
+        <span class="card-link">Explore Tools →</span>
+      </a>
+      <a href="{{ url_for('subtitles') }}" class="card" style="text-decoration:none">
+        <div class="card-icon">🎬</div>
+        <div class="card-title">Subtitle Generator</div>
+        <div class="card-desc">Auto-generate Urdu subtitles & SRT files for YouTube, TikTok, and reels.</div>
+        <span class="card-link">Generate SRT →</span>
+      </a>
+      {% if filedsk_url %}
+      <a href="{{ url_for('filedsk') }}" class="card" style="text-decoration:none" target="_blank">
+        <div class="card-icon">📁</div>
+        <div class="card-title">FileDesk</div>
+        <div class="card-desc">Word to PDF, image converters, and more file tools. Opens in a new tab.</div>
+        <span class="card-link">Open FileDesk →</span>
+      </a>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<!-- Pricing -->
+<section style="padding: 2rem 0 4rem">
+  <div class="container">
+    <div class="section-header text-center">
+      <h2 class="section-title">Simple Pricing</h2>
+      <p class="section-subtitle" style="margin:0 auto">Start free. Upgrade when you need more power.</p>
+    </div>
+    <div class="pricing-grid">
+      <div class="pricing-card">
+        <div class="pricing-label free">Free</div>
+        <div class="pricing-price">{{ free_price_label }}</div>
+        <ul class="pricing-features">
+          {% for f in free_features %}
+            <li>{{ f.strip() }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div class="pricing-card pro">
+        <div class="pricing-label pro">⭐ Studio Pro</div>
+        <div class="pricing-price">{{ pro_price_label }}<span>/mo</span></div>
+        <ul class="pricing-features">
+          {% for f in pro_features %}
+            <li>{{ f.strip() }}</li>
+          {% endfor %}
+        </ul>
+        <a href="{{ url_for('request_pro') }}" class="btn btn-primary" style="width:100%;margin-top:1rem">Request Pro →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Stats Bar -->
+<section style="padding: 0 0 4rem">
+  <div class="container text-center">
+    <div class="glass-panel" style="display:inline-flex;align-items:center;gap:1.5rem;flex-wrap:wrap;justify-content:center">
+      {% if is_pro %}
+        <span class="stat-pill pro">⭐ Pro Active — Unlimited</span>
+      {% else %}
+        <div style="display:flex;align-items:center;gap:0.75rem">
+          <div class="progress-ring">
+            <svg width="48" height="48" viewBox="0 0 48 48">
+              <circle class="progress-ring-bg" cx="24" cy="24" r="20"/>
+              <circle class="progress-ring-fill" cx="24" cy="24" r="20" stroke-dasharray="125.6" stroke-dashoffset="{{ 125.6 * (1 - actions_left / free_daily_actions) }}"/>
+            </svg>
+            <span class="progress-ring-text" id="actions-left">{{ actions_left }}</span>
+          </div>
+          <div style="text-align:left">
+            <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary)">Free Actions Left</div>
+            <div style="font-size:0.75rem;color:var(--text-muted)">Resets daily at midnight</div>
+          </div>
+        </div>
+        <a href="{{ url_for('request_pro') }}" class="btn btn-primary btn-sm">Upgrade to Pro</a>
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endblock %}

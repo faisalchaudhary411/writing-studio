@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block title %}Freelancer Toolkit{% endblock %}
+
+{% block content %}
+<section style="padding: 7rem 0 2rem">
+  <div class="container">
+    <div class="section-header">
+      <h1 class="section-title">💼 Freelancer Toolkit</h1>
+      <p class="section-subtitle">Proposals, invoices & emails that close deals.</p>
+      {% if is_pro %}
+        <span class="stat-pill pro">⭐ Pro — Unlimited</span>
+      {% else %}
+        <span class="stat-pill">🆓 Free — <span id="actions-left">{{ actions_left }}</span> actions left today</span>
+      {% endif %}
+    </div>
+
+    <div class="glass-panel" style="max-width: 900px; margin: 0 auto;">
+      <div class="tabs">
+        <button class="tab-btn active">📝 Proposal Writer</button>
+        <button class="tab-btn">🧾 Invoice Generator</button>
+        <button class="tab-btn">📧 Client Email</button>
+      </div>
+
+      <!-- Proposal Tab -->
+      <div class="tab-panel active">
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Platform</label>
+            <select class="form-select" id="prop-platform">
+              <option>Fiverr</option>
+              <option>Upwork</option>
+              <option>Local Client (Pakistan)</option>
+              <option>LinkedIn</option>
+              <option>Email</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Language</label>
+            <select class="form-select" id="prop-lang">
+              <option>English (Professional)</option>
+              <option>Roman Urdu</option>
+              <option>Pure Urdu</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Your Service</label>
+          <input type="text" class="form-input" id="prop-service" placeholder="e.g. Logo Design, WordPress Website">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Client Requirements</label>
+          <textarea class="form-textarea" id="prop-need" rows="3"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Your Experience (optional)</label>
+          <textarea class="form-textarea" id="prop-exp" rows="2"></textarea>
+        </div>
+        <button class="btn btn-primary" id="generate-proposal-btn" style="width:100%">📝 Generate Proposal</button>
+        <div id="proposal-output" class="output-box ltr" style="display:none"></div>
+        <button class="btn btn-secondary" data-download="#proposal-output" data-filename="qalam_proposal.txt" style="width:100%;margin-top:0.75rem;display:none" id="dl-proposal">📥 Download Proposal</button>
+      </div>
+
+      <!-- Invoice Tab -->
+      <div class="tab-panel">
+        <div class="grid-2">
+          <div>
+            <div class="form-group">
+              <label class="form-label">Your Name / Business</label>
+              <input type="text" class="form-input" id="inv-yname" placeholder="Ali Ahmed Design">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Your Email</label>
+              <input type="text" class="form-input" id="inv-yemail" placeholder="ali@email.com">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Your Phone</label>
+              <input type="text" class="form-input" id="inv-yphone" placeholder="+92 300 1234567">
+            </div>
+          </div>
+          <div>
+            <div class="form-group">
+              <label class="form-label">Client Name</label>
+              <input type="text" class="form-input" id="inv-cname" placeholder="XYZ Company">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Client Email</label>
+              <input type="text" class="form-input" id="inv-cemail" placeholder="client@email.com">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Date</label>
+              <input type="text" class="form-input" id="inv-date" value="{{ now.strftime('%d %B %Y') if now else '' }}">
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Items</label>
+          <div id="invoice-items">
+            <div class="invoice-item grid-3 gap-1">
+              <input type="text" class="form-input inv-desc" placeholder="Item #1">
+              <input type="number" class="form-input inv-qty" value="1" min="1">
+              <input type="number" class="form-input inv-rate" value="0" min="0" step="100">
+            </div>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm mt-1" id="add-invoice-item">+ Add Item</button>
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Currency</label>
+            <select class="form-select" id="inv-currency">
+              <option>PKR</option>
+              <option>USD</option>
+              <option>EUR</option>
+              <option>GBP</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Notes</label>
+            <input type="text" class="form-input" id="inv-note" placeholder="Payment due in 7 days.">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="generate-invoice-btn" style="width:100%">🧾 Generate Invoice</button>
+        <div id="invoice-output" class="output-box ltr" style="display:none;font-family:monospace;font-size:0.82rem"></div>
+        <button class="btn btn-secondary" data-download="#invoice-output" data-filename="invoice.txt" style="width:100%;margin-top:0.75rem;display:none" id="dl-invoice">📥 Download Invoice</button>
+      </div>
+
+      <!-- Email Tab -->
+      <div class="tab-panel">
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Email Type</label>
+            <select class="form-select" id="email-type">
+              <option>Project Delivery</option>
+              <option>Payment Request</option>
+              <option>Follow-up</option>
+              <option>Handle Complaint</option>
+              <option>Ask for Review</option>
+              <option>Project Update</option>
+              <option>Decline Politely</option>
+              <option>Custom Email</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Language</label>
+            <select class="form-select" id="email-lang">
+              <option>English (Professional)</option>
+              <option>Roman Urdu</option>
+              <option>Pure Urdu</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tone</label>
+          <select class="form-select" id="email-tone">
+            <option>Professional</option>
+            <option>Friendly</option>
+            <option>Firm but Polite</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Context / Details</label>
+          <textarea class="form-textarea" id="email-ctx" rows="4"></textarea>
+        </div>
+        <button class="btn btn-primary" id="generate-email-btn" style="width:100%">📧 Generate Email</button>
+        <div id="email-output" class="output-box ltr" style="display:none"></div>
+        <button class="btn btn-secondary" data-download="#email-output" data-filename="qalam_email.txt" style="width:100%;margin-top:0.75rem;display:none" id="dl-email">📥 Download Email</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+document.querySelectorAll("#generate-proposal-btn, #generate-invoice-btn, #generate-email-btn").forEach(btn => {
+  btn.addEventListener("click", function() {
+    setTimeout(() => {
+      if (this.id === "generate-proposal-btn") document.getElementById("dl-proposal").style.display = "inline-flex";
+      if (this.id === "generate-invoice-btn") document.getElementById("dl-invoice").style.display = "inline-flex";
+      if (this.id === "generate-email-btn") document.getElementById("dl-email").style.display = "inline-flex";
+    }, 1000);
+  });
+});
+</script>
+{% endblock %}

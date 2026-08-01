@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Subtitle Generator{% endblock %}
+
+{% block content %}
+<section style="padding: 7rem 0 2rem">
+  <div class="container">
+    <div class="section-header">
+      <h1 class="section-title">🎬 Urdu Subtitle Generator</h1>
+      <p class="section-subtitle">Auto-generate and translate subtitles in seconds.</p>
+      {% if is_pro %}
+        <span class="stat-pill pro">⭐ Pro — Unlimited</span>
+      {% else %}
+        <span class="stat-pill">🆓 Free — <span id="actions-left">{{ actions_left }}</span> actions left today</span>
+      {% endif %}
+    </div>
+
+    <div class="glass-panel" style="max-width: 900px; margin: 0 auto;">
+      <div class="tabs">
+        <button class="tab-btn active">📝 Script to SRT</button>
+        <button class="tab-btn">🔄 Translate SRT to Urdu</button>
+      </div>
+
+      <!-- Script to SRT -->
+      <div class="tab-panel active">
+        <div class="form-group">
+          <label class="form-label">Your Video Script</label>
+          <textarea class="form-textarea" id="sub-script" rows="8" placeholder="Paste your script here..."></textarea>
+        </div>
+        <div class="grid-3">
+          <div class="form-group">
+            <label class="form-label">Duration (minutes)</label>
+            <input type="number" class="form-input" id="sub-dur" value="5" min="1" max="60">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Language</label>
+            <select class="form-select" id="sub-lang">
+              <option>Urdu (اردو)</option>
+              <option>Roman Urdu</option>
+              <option>English</option>
+              <option>Hindi</option>
+              <option>Arabic</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Words per line</label>
+            <input type="number" class="form-input" id="sub-wps" value="8" min="5" max="15">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="generate-srt-btn" style="width:100%">🎬 Generate SRT</button>
+        <div style="display:none;margin-top:1rem">
+          <label class="form-label">SRT Preview</label>
+          <textarea class="form-textarea" id="srt-output" rows="10" readonly></textarea>
+          <button class="btn btn-secondary" data-download="#srt-output" data-filename="qalam_subtitles.srt" style="width:100%;margin-top:0.75rem">📥 Download .SRT File</button>
+        </div>
+      </div>
+
+      <!-- Translate SRT -->
+      <div class="tab-panel">
+        <div class="form-group">
+          <label class="form-label">Paste English SRT</label>
+          <textarea class="form-textarea" id="eng-srt" rows="10" placeholder="1
+00:00:00,000 --> 00:00:03,000
+Hello everyone..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Translation Style</label>
+          <select class="form-select" id="trans-style">
+            <option>Pure Urdu (اردو)</option>
+            <option>Roman Urdu</option>
+            <option>Mixed Urdu-English</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" id="translate-srt-btn" style="width:100%">🔄 Translate to Urdu SRT</button>
+        <div style="display:none;margin-top:1rem">
+          <label class="form-label">Urdu SRT Preview</label>
+          <textarea class="form-textarea" id="trans-output" rows="10" readonly></textarea>
+          <button class="btn btn-secondary" data-download="#trans-output" data-filename="qalam_urdu_subtitles.srt" style="width:100%;margin-top:0.75rem">📥 Download Urdu .SRT File</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

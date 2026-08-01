@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}QalamStudio{% endblock %} — Pakistan's AI Writing Studio</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>✍️</text></svg>">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script>
+    window.IS_PRO = {{ 'true' if is_pro else 'false' }};
+  </script>
+
+  <!-- Adsterra Popunder — only for free users -->
+  {% if not is_pro %}
+  <script>
+  (function(){
+    let triggered = false;
+    document.addEventListener('click', function(e){
+      if(!triggered && e.target.closest('button, .btn, [role="button"]')){
+        triggered = true;
+        setTimeout(function(){
+          var w = window.open('about:blank','_blank');
+          if(w){ w.location='https://www.effectivecpmnetwork.com/y29b51ygf?key=6d81ae914eae0a29f481ed4a8117e686'; w.blur(); window.focus(); }
+        }, 300);
+      }
+    }, {once:true});
+  })();
+  </script>
+  {% endif %}
+</head>
+<body>
+  <canvas id="aurora-canvas"></canvas>
+  <canvas id="particle-canvas"></canvas>
+
+  <div class="page-wrapper">
+    <!-- Navigation -->
+    <nav class="nav-floating">
+      <a href="{{ url_for('landing') }}" class="nav-logo">✍️ QalamStudio</a>
+      <div class="nav-links">
+        <a href="{{ url_for('landing') }}" class="nav-link {% if request.endpoint == 'landing' %}active{% endif %}">Home</a>
+        <a href="{{ url_for('urdu_writer') }}" class="nav-link {% if request.endpoint == 'urdu_writer' %}active{% endif %}">Urdu Writer</a>
+        <a href="{{ url_for('freelancer') }}" class="nav-link {% if request.endpoint == 'freelancer' %}active{% endif %}">Freelancer</a>
+        <a href="{{ url_for('subtitles') }}" class="nav-link {% if request.endpoint == 'subtitles' %}active{% endif %}">Subtitles</a>
+        {% if filedsk_url %}
+        <a href="{{ url_for('filedsk') }}" class="nav-link {% if request.endpoint == 'filedsk' %}active{% endif %}" target="_blank">📁 FileDesk</a>
+        {% endif %}
+        <a href="{{ url_for('blog') }}" class="nav-link {% if request.endpoint == 'blog' or request.endpoint == 'blog_post' %}active{% endif %}">Blog</a>
+        {% if is_pro %}
+          <span class="nav-pro-badge">⭐ PRO</span>
+        {% endif %}
+      </div>
+      <button class="nav-mobile-toggle">☰</button>
+    </nav>
+
+    <!-- Adsterra Banner Ad — only for free users -->
+    {% if not is_pro %}
+    <div style="text-align:center;padding-top:5.5rem;padding-bottom:0;">
+      <iframe src="{{ url_for('ads_slot', slot='banner') }}" style="width:100%;max-width:468px;height:90px;border:0;" scrolling="no"></iframe>
+    </div>
+    {% endif %}
+
+    <!-- Flash Messages (converted to toasts by JS) -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div style="display:none">
+          {% for category, message in messages %}
+            <div class="flash-message" data-type="{{ 'error' if category == 'error' else 'success' if category == 'success' else 'info' }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <!-- Main Content -->
+    <main style="flex:1">
+      {% block content %}{% endblock %}
+    </main>
+
+    <!-- Adsterra Footer Banner — only for free users -->
+    {% if not is_pro %}
+    <div style="text-align:center;padding:1rem 0;">
+      <iframe src="{{ url_for('ads_slot', slot='banner') }}" style="width:100%;max-width:468px;height:90px;border:0;" scrolling="no"></iframe>
+    </div>
+    {% endif %}
+
+    <!-- License Trigger -->
+    {% if not is_pro %}
+    <div class="license-trigger" onclick="document.getElementById('license-modal').classList.add('active')">
+      🔑 Have a Pro key?
+    </div>
+    {% else %}
+    <div class="license-trigger" onclick="document.getElementById('deactivate-pro-btn').click()">
+      ⭐ Pro Active — Click to deactivate
+    </div>
+    {% endif %}
+
+    <!-- License Modal -->
+    <div class="modal-overlay" id="license-modal">
+      <div class="modal">
+        <h3 style="font-family:'Syne',sans-serif;font-weight:700;margin-bottom:1rem;color:var(--text-primary)">🔑 Activate Pro License</h3>
+        {% if not is_pro %}
+          <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:1rem">Enter your license key to unlock unlimited access.</p>
+          <div class="form-group">
+            <input type="text" class="form-input" id="license-key-input" placeholder="QALAM-PRO-XXXXXXXXXXXX">
+          </div>
+          <button class="btn btn-primary" id="activate-license-btn" style="width:100%">Activate License</button>
+        {% else %}
+          <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:1rem">Pro is active on this device.</p>
+          <button class="btn btn-danger" id="deactivate-pro-btn" style="width:100%">Deactivate Pro</button>
+        {% endif %}
+        <button class="btn btn-ghost" style="width:100%;margin-top:0.5rem" onclick="document.getElementById('license-modal').classList.remove('active')">Close</button>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="container">
+        <div class="footer-links">
+          <a href="{{ url_for('about') }}" class="footer-link">About</a>
+          <a href="{{ url_for('blog') }}" class="footer-link">Blog</a>
+          <a href="{{ url_for('contact') }}" class="footer-link">Contact</a>
+          <a href="{{ url_for('privacy') }}" class="footer-link">Privacy</a>
+          <a href="{{ url_for('terms') }}" class="footer-link">Terms</a>
+          <a href="{{ url_for('admin_login') }}" class="footer-link">Admin</a>
+        </div>
+        <div class="footer-copy">© {{ year }} QalamStudio · Made in Pakistan 🇵🇰</div>
+      </div>
+    </footer>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
