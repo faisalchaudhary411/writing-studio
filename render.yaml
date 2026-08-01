@@ -1,0 +1,56 @@
+services:
+  - type: web
+    name: qalamstudio
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 60
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: SECRET_KEY
+        generateValue: true
+      - key: GROQ_API_KEY
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GH_REPO
+        sync: false
+      - key: GH_REPO_PUBLIC
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: FREEMIUS_API_KEY
+        sync: false
+      - key: FREEMIUS_SECRET_KEY
+        sync: false
+      - key: FREEMIUS_PRODUCT_ID
+        sync: false
+      - key: FREEMIUS_DEVELOPER_ID
+        sync: false
+      - key: FREEMIUS_PLUGIN_ID
+        sync: false
+      - key: FILEDESK_URL
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: WHATSAPP_API_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_ADMIN_NUMBER
+        sync: false
+      - key: WAPPFLY_API_KEY
+        sync: false
+      - key: WAPPFLY_ADMIN_NUMBER
+        sync: false
