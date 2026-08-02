@@ -362,6 +362,7 @@
         output.textContent = res.result;
         output.className = "output-box " + (langStyle === "Roman Urdu" ? "ltr" : "urdu");
         output.style.display = "block";
+        if (res.warning) Toast.show(res.warning, "error", 7000);
         updateActionsLeft();
       } finally {
         btn.disabled = false;
@@ -395,6 +396,7 @@
           out.textContent = res.result;
           out.className = "output-box " + (lang === "Pure Urdu" ? "urdu" : "ltr");
           out.style.display = "block";
+          if (res.warning) Toast.show(res.warning, "error", 7000);
           updateActionsLeft();
         } finally {
           propBtn.disabled = false;
@@ -477,6 +479,7 @@
           out.textContent = res.result;
           out.className = "output-box " + (lang === "Pure Urdu" ? "urdu" : "ltr");
           out.style.display = "block";
+          if (res.warning) Toast.show(res.warning, "error", 7000);
           updateActionsLeft();
         } finally {
           emailBtn.disabled = false;
