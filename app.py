@@ -723,9 +723,28 @@ def can_act():
 # GROQ AI
 # ──────────────────────────────────────────────────────────────────────
 def call_groq(system: str, user: str, max_tokens=2000):
+    """BUG FIX: this never checked Groq's finish_reason field, so when a
+    response got cut off because it hit max_tokens (finish_reason=="length"),
+    the truncated/incomplete content was returned as if it were a normal,
+    complete result — with no way for the caller (or the user) to know it
+    was cut off. This is very likely the source of 'corrupted/garbage'
+    output reports: for content types with variable output length (long Urdu
+    articles, SRT subtitle files, translations of long files), the fixed
+    max_tokens value across all endpoints was often too low, and cut-off SRT
+    files in particular can look like garbage to a video player since the
+    truncation point breaks the file's syntax entirely.
+
+    Returns (content, error, was_truncated) — callers should check
+    was_truncated and warn the user rather than presenting a cut-off result
+    as if it were complete.
+    """
     try:
         if not Config.GROQ_API_KEY:
-            return None, "GROQ_API_KEY not set"
+            return None, "GROQ_API_KEY not set", False
+        # Groq's hard ceiling for this model is 8192 output tokens per
+        # request — asking for more than that fails outright, so clamp here
+        # rather than let a bad max_tokens value break the request.
+        max_tokens = min(max_tokens, 8000)
         r = req.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers={"Authorization": f"Bearer {Config.GROQ_API_KEY}", "Content-Type": "application/json"},
@@ -734,10 +753,12 @@ def call_groq(system: str, user: str, max_tokens=2000):
             timeout=60
         )
         if r.status_code == 200:
-            return r.json()["choices"][0]["message"]["content"], None
-        return None, f"API error {r.status_code}"
+            choice = r.json()["choices"][0]
+            was_truncated = choice.get("finish_reason") == "length"
+            return choice["message"]["content"], None, was_truncated
+        return None, f"API error {r.status_code}", False
     except Exception as e:
-        return None, str(e)
+        return None, str(e), False
 
 def get_urdu_prompt(content_type, tone, lang_style, word_count):
     lang = {
@@ -992,11 +1013,25 @@ def api_generate_urdu():
     if not topic:
         return jsonify({"error": "Topic is required"}), 400
     system = get_urdu_prompt(content_type, tone, lang_style, word_count)
-    result, err = call_groq(system, f"اس موضوع پر لکھو: {topic}")
+    # BUG FIX: max_tokens was fixed at 2000 regardless of the word_count
+    # option selected. Urdu/Roman Urdu need noticeably more tokens per word
+    # than English (script + tokenizer inefficiency), so "Long (600-1000
+    # words)" was very likely to get cut off mid-generation at 2000 tokens.
+    # Scaled to roughly cover each tier with headroom, capped under Groq's
+    # 8192-token hard ceiling for this model.
+    tokens_for_length = {
+        "Short (100-200 words)": 1200,
+        "Medium (300-500 words)": 2200,
+        "Long (600-1000 words)": 4000,
+    }.get(word_count, 2200)
+    result, err, truncated = call_groq(system, f"اس موضوع پر لکھو: {topic}", tokens_for_length)
     if err:
         return jsonify({"error": err}), 500
     record_action()
-    return jsonify({"result": result})
+    resp = {"result": result}
+    if truncated:
+        resp["warning"] = "The content was cut off because it ran longer than expected — try a shorter length option, or regenerate."
+    return jsonify(resp)
 
 @app.route("/api/generate-proposal", methods=["POST"])
 def api_generate_proposal():
@@ -1016,11 +1051,14 @@ def api_generate_proposal():
         "Pure Urdu": "قدرتی پاکستانی اردو میں — professional مگر روبوٹ نہیں۔"
     }
     sys_p = f"You are an expert proposal writer for Pakistani freelancers.\n{lm[prop_lang]}\nPlatform: {platform}. Structure: Strong opening hook → Show you understood requirements → Your relevant experience → Clear deliverables → Timeline → CTA."
-    result, err = call_groq(sys_p, f"Service: {service}\nClient needs: {client_need}\nMy experience: {your_exp or 'Not specified'}", 800)
+    result, err, truncated = call_groq(sys_p, f"Service: {service}\nClient needs: {client_need}\nMy experience: {your_exp or 'Not specified'}", 1400)
     if err:
         return jsonify({"error": err}), 500
     record_action()
-    return jsonify({"result": result})
+    resp = {"result": result}
+    if truncated:
+        resp["warning"] = "The proposal was cut off because it ran longer than expected — try shortening your inputs, or regenerate."
+    return jsonify(resp)
 
 @app.route("/api/generate-invoice", methods=["POST"])
 def api_generate_invoice():
@@ -1081,16 +1119,19 @@ def api_generate_email():
         "Pure Urdu": "قدرتی اردو میں — پیشہ ورانہ اور گرمجوش۔"
     }
     sys_e = f"You are an expert email writer for Pakistani freelancers.\n{lm[elang]}\nTone: {etone}. Write for: {etype}.\nInclude Subject, greeting, body, closing. Be concise and human."
-    result, err = call_groq(sys_e, f"Context: {ectx}", 600)
+    result, err, truncated = call_groq(sys_e, f"Context: {ectx}", 1000)
     if err:
         return jsonify({"error": err}), 500
     record_action()
-    return jsonify({"result": result})
+    resp = {"result": result}
+    if truncated:
+        resp["warning"] = "The email was cut off because it ran longer than expected — try shortening the context, or regenerate."
+    return jsonify(resp)
 
 @app.route("/api/generate-srt", methods=["POST"])
 def api_generate_srt():
     if not can_act():
-        return jsonify({"error": "Daily limit reached"}), 429
+        return jsonify({"error": f"Daily limit reached"}), 429
     data = request.get_json() or {}
     script = data.get("script", "").strip()
     dur = int(data.get("dur", 5))
@@ -1098,11 +1139,27 @@ def api_generate_srt():
     wps = int(data.get("wps", 8))
     if not script:
         return jsonify({"error": "Script required"}), 400
+    # BUG FIX: the UI allowed up to 60 minutes, but max_tokens was fixed at
+    # 3000 regardless — and Groq's hard ceiling for this model is 8192
+    # tokens/request, which physically cannot fit a proper SRT file for
+    # anything close to 60 minutes (realistically needs 20,000+ tokens for
+    # that length). No amount of max_tokens tuning fixes this for long
+    # durations — it's a one-call-per-request architecture limit. Capping to
+    # a duration that reliably fits in one call, and scaling tokens to the
+    # actual requested duration instead of a fixed number.
+    if dur > 12:
+        return jsonify({"error": "Duration is capped at 12 minutes per generation right now — longer subtitle files need to be split into segments. Support for longer files is planned."}), 400
+    tokens_needed = min(8000, max(2000, dur * 700))
     li = {"Urdu (اردو)": "قدرتی اردو میں convert کرو۔", "Roman Urdu": "Roman Urdu میں convert کرو۔", "English": "Keep in English.", "Hindi": "Hindi script میں۔", "Arabic": "Arabic script میں۔"}
     sys_s = f"Professional subtitle generator.\n{li[slang]}\nSRT format. Max {wps} words per subtitle. Distribute timing across {dur} minutes.\nOutput ONLY valid SRT. No preamble."
-    result, err = call_groq(sys_s, f"Convert to SRT:\n\n{script}", 3000)
+    result, err, truncated = call_groq(sys_s, f"Convert to SRT:\n\n{script}", tokens_needed)
     if err:
         return jsonify({"error": err}), 500
+    if truncated:
+        # A cut-off SRT file breaks subtitle syntax at the truncation point —
+        # genuinely broken output, not just "incomplete". Refuse to hand this
+        # back as if it were usable, and don't charge the daily quota for it.
+        return jsonify({"error": "The subtitle file was cut off partway through and would be broken in a video player. Try a shorter duration or a shorter script."}), 500
     record_action()
     return jsonify({"result": result})
 
@@ -1115,13 +1172,26 @@ def api_translate_srt():
     tstyle = data.get("tstyle", "Pure Urdu (اردو)")
     if not eng_srt:
         return jsonify({"error": "SRT required"}), 400
+    # BUG FIX: max_tokens was fixed at 3000 regardless of input length — a
+    # translated SRT needs roughly as much output as the input's length (often
+    # more, since Urdu/Roman Urdu needs more tokens per word than English), so
+    # long input files were very likely to get cut off. Scaling to the actual
+    # input size instead, and rejecting cleanly (not charging the daily quota)
+    # if it still doesn't fit in one call — a cut-off translated SRT has the
+    # same broken-syntax problem as a cut-off generated one.
+    input_tokens_est = len(eng_srt) // 3  # rough chars-to-tokens estimate
+    if input_tokens_est > 5000:
+        return jsonify({"error": "This SRT file is too long to translate in one pass. Please split it into smaller chunks (a few hundred lines each) and translate separately."}), 400
+    tokens_needed = min(8000, max(2000, int(input_tokens_est * 2.5) + 500))
     tm = {"Pure Urdu (اردو)": "قدرتی پاکستانی اردو میں translate کرو۔ Timestamps بالکل مت بدلو۔",
           "Roman Urdu": "Roman Urdu میں translate کرو۔ Timestamps identical رکھو۔",
           "Mixed Urdu-English": "Natural Urdu-English mix میں۔ Timestamps مت بدلو۔"}
     sys_t = f"Professional Urdu subtitle translator.\n{tm[tstyle]}\nOutput ONLY translated SRT. Never touch timestamps or numbers."
-    result, err = call_groq(sys_t, f"Translate:\n\n{eng_srt}", 3000)
+    result, err, truncated = call_groq(sys_t, f"Translate:\n\n{eng_srt}", tokens_needed)
     if err:
         return jsonify({"error": err}), 500
+    if truncated:
+        return jsonify({"error": "The translation was cut off partway through and would be broken in a video player. Try splitting the file into smaller chunks."}), 500
     record_action()
     return jsonify({"result": result})
 
@@ -1135,6 +1205,68 @@ def api_actions_left():
 # ──────────────────────────────────────────────────────────────────────
 # FREEMIUS WEBHOOK — Automated Payment → License
 # ──────────────────────────────────────────────────────────────────────
+@app.route("/fs-callback")
+def fs_callback():
+    """Freemius redirects the customer's browser here after a successful
+    checkout (?license_id=X&email=Y as real query params — this is the
+    customer's own browser landing here, NOT a webhook). Matches VoxCraft's
+    flow exactly: verify with Freemius, mint (or reuse) an internal key, show
+    it with an inline Activate button on this same page.
+
+    IMPORTANT — requires Freemius to be configured to redirect here: in your
+    Freemius Developer Dashboard, go to Plans → Customization → enable
+    "Redirect Checkout to a custom URL" → set it to
+    https://<your-domain>/fs-callback. Without that, customers land on
+    Freemius's own generic thank-you page instead of this one.
+
+    This complements (doesn't replace) the existing /webhook/freemius route —
+    the webhook handles server-to-server confirmation async, while this page
+    is what the customer's browser actually sees right after paying.
+    """
+    fs_license_id = request.args.get("license_id", "")
+    fs_email = request.args.get("email", "")
+
+    if not fs_license_id:
+        return render_template("fs_callback.html", error="no_license_id")
+
+    verify_result = verify_freemius_license(fs_license_id)
+    if not verify_result.get("valid"):
+        return render_template("fs_callback.html", error="not_verified",
+                                license_id=fs_license_id,
+                                verify_error=verify_result.get("error", "unknown"))
+
+    keys = _get_license_keys()
+    existing_key = next((k for k, v in keys.items() if v.get("freemius_license_id") == fs_license_id), None)
+
+    if existing_key:
+        license_key = existing_key
+    else:
+        license_key, err = create_freemius_license(
+            verify_result.get("user_name") or "Pro User",
+            verify_result.get("user_email") or fs_email,
+            {"license_id": fs_license_id},
+        )
+        if err:
+            return render_template("fs_callback.html", error="not_verified",
+                                    license_id=fs_license_id, verify_error=err)
+
+    return render_template("fs_callback.html", success=True, license_key=license_key)
+
+
+@app.route("/fs-callback/activate", methods=["POST"])
+def fs_callback_activate():
+    """The inline 'Activate Pro Now' button on the fs_callback success page."""
+    key = request.form.get("license_key", "").strip()
+    result = activate_license(key)
+    if result.get("valid"):
+        session["is_pro"] = True
+        session["license_key"] = key
+        session["pro_name"] = result.get("name", "Pro User")
+        return redirect(url_for("urdu_writer"))
+    return render_template("fs_callback.html", success=True, license_key=key,
+                            activate_error=result.get("error", "Activation failed."))
+
+
 @app.route("/webhook/freemius", methods=["POST"])
 def freemius_webhook():
     """Handle Freemius payment webhooks — auto-generate and email license keys."""
