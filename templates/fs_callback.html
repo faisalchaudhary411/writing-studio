@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Payment Status — QalamStudio{% endblock %}
+
+{% block content %}
+<section style="padding: 7rem 0 2rem">
+  <div class="container" style="max-width: 520px">
+    <h1 class="section-title text-gradient" style="font-size:1.8rem;margin-bottom:1.5rem;">💳 Payment Status</h1>
+
+    <div class="glass-panel">
+      {% if error == "no_license_id" %}
+        <p style="color:#ff6b6b;">No license ID found in the URL. If you just paid, try the link from your Freemius receipt email instead.</p>
+        <a href="{{ url_for('request_pro') }}" class="btn btn-secondary" style="width:100%;margin-top:1rem;">← Back to Get Pro</a>
+
+      {% elif error == "not_verified" %}
+        <div style="background:rgba(255,107,107,0.08);border:1px solid rgba(255,107,107,0.25);border-radius:12px;padding:1rem;">
+          <div style="color:#ff6b6b;font-weight:700;font-size:0.9rem;margin-bottom:0.5rem;">⚠️ Payment not confirmed yet</div>
+          <p style="color:rgba(255,255,255,0.6);font-size:0.85rem;line-height:1.6;">
+            If you completed the payment, it can take a few minutes to process. Error: <code style="color:rgba(255,255,255,0.4);">{{ verify_error }}</code>
+          </p>
+        </div>
+        <div style="display:flex;gap:0.6rem;margin-top:1rem;">
+          <a href="{{ url_for('fs_callback') }}?license_id={{ license_id }}" class="btn btn-secondary" style="flex:1;">🔄 Check Again</a>
+          <a href="{{ url_for('request_pro') }}" class="btn btn-secondary" style="flex:1;">← Back</a>
+        </div>
+
+      {% elif success %}
+        <p style="color:#00c896;font-weight:700;">✅ Payment verified successfully!</p>
+
+        <div style="background:rgba(0,200,150,0.08);border:1px solid rgba(0,200,150,0.25);border-radius:12px;padding:1rem;margin-top:1rem;">
+          <div style="color:#00c896;font-weight:700;font-size:0.9rem;margin-bottom:0.5rem;">🎉 Your license key is ready</div>
+          <code style="color:#00c896;font-size:1.05rem;font-family:monospace;word-break:break-all;">{{ license_key }}</code>
+        </div>
+
+        {% if activate_error %}
+          <p style="color:#ff6b6b;margin-top:0.8rem;">❌ Activation failed: {{ activate_error }}</p>
+        {% endif %}
+
+        <form method="post" action="{{ url_for('fs_callback_activate') }}" style="margin-top:1rem;">
+          <input type="hidden" name="license_key" value="{{ license_key }}">
+          <button type="submit" class="btn btn-primary" style="width:100%;">🚀 Activate Pro Now</button>
+        </form>
+        <p style="color:rgba(255,255,255,0.4);font-size:0.78rem;margin-top:0.6rem;text-align:center;">This activates Pro on the device/browser you're using right now.</p>
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endblock %}
