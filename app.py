@@ -1274,8 +1274,24 @@ def freemius_webhook():
     event = data.get("event", "")
 
     # Verify webhook signature if secret is configured
-    signature = request.headers.get("X-Freemius-Signature", "")
-    if Config.FREEMIUS_SECRET_KEY and signature:
+    # BUG FIX: this checked for a header called "X-Freemius-Signature", but
+    # Freemius actually sends it as "X-Signature" (confirmed against their
+    # docs — PHP's $_SERVER['HTTP_X_SIGNATURE'] maps to the raw header
+    # "X-Signature"). Since the wrong header name never matched, `signature`
+    # was always empty, which silently skipped verification entirely — ANY
+    # POST to this endpoint was processed as if it came from Freemius,
+    # regardless of whether FREEMIUS_SECRET_KEY was set. This is a real
+    # security gap: without this fix, anyone who finds this URL could POST a
+    # fake payload and get a free license key generated and emailed to them.
+    signature = request.headers.get("X-Signature", "")
+    if Config.FREEMIUS_SECRET_KEY:
+        # BUG FIX: previously required BOTH secret key configured AND a
+        # signature header present to verify — meaning an attacker could
+        # bypass verification just by omitting the header entirely. Once a
+        # secret key is configured, a missing/invalid signature is now
+        # always rejected rather than silently trusted.
+        if not signature:
+            return jsonify({"error": "Missing signature"}), 401
         import hmac, hashlib
         expected = hmac.new(
             Config.FREEMIUS_SECRET_KEY.encode(),
