@@ -14,10 +14,19 @@
   {% if not is_pro %}
   <script>
   (function(){
+    // BUG FIX: this used a plain JS variable + {once:true}, which only
+    // prevents re-firing WITHIN one page load. Since this is a multi-page
+    // Flask app (full page reload on every navigation, not an SPA), that
+    // state reset on every single page — so the first click on ANY new page
+    // popped the ad again, which is why it felt like it fired on every
+    // click. sessionStorage persists across page loads within the same
+    // browser tab/session, so it now genuinely fires once per session.
+    if (sessionStorage.getItem('qalam_popunder_shown')) return;
     let triggered = false;
     document.addEventListener('click', function(e){
       if(!triggered && e.target.closest('button, .btn, [role="button"]')){
         triggered = true;
+        sessionStorage.setItem('qalam_popunder_shown', '1');
         setTimeout(function(){
           var w = window.open('about:blank','_blank');
           if(w){ w.location='https://www.effectivecpmnetwork.com/y29b51ygf?key=6d81ae914eae0a29f481ed4a8117e686'; w.blur(); window.focus(); }
