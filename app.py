@@ -1541,7 +1541,12 @@ def admin_save_blog():
 @app.route("/admin/api/delete-blog", methods=["POST"])
 @admin_required
 def admin_delete_blog():
-    post_id = request.form.get("id", "").strip()
+    # BUG FIX: this read request.form.get("id"), but the frontend's api()
+    # helper sends JSON (Content-Type: application/json), not form-encoded
+    # data — so request.form was always empty and post_id was always "".
+    # The delete silently did nothing while still returning {"success": true}.
+    data = request.get_json() or {}
+    post_id = data.get("id", "").strip()
     posts = _get_blog_posts()
     posts = [p for p in posts if p.get("id") != post_id]
     _save_blog_posts(posts)
@@ -1550,7 +1555,9 @@ def admin_delete_blog():
 @app.route("/admin/api/toggle-blog", methods=["POST"])
 @admin_required
 def admin_toggle_blog():
-    post_id = request.form.get("id", "").strip()
+    # Same fix as delete-blog above — was request.form, now request.get_json().
+    data = request.get_json() or {}
+    post_id = data.get("id", "").strip()
     posts = _get_blog_posts()
     for p in posts:
         if p.get("id") == post_id:
