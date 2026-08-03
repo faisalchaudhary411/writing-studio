@@ -680,6 +680,38 @@
       });
     }
 
+    // Blog: write new post
+    const createBlogBtn = document.getElementById("create-blog-btn");
+    if (createBlogBtn) {
+      createBlogBtn.addEventListener("click", async () => {
+        const title = document.getElementById("new-blog-title").value.trim();
+        const body = document.getElementById("new-blog-body").value.trim();
+        if (!title || !body) {
+          Toast.show("Title and body are required.", "error");
+          return;
+        }
+        createBlogBtn.disabled = true;
+        try {
+          const res = await api("/admin/api/save-blog", {
+            title,
+            category: document.getElementById("new-blog-category").value.trim(),
+            excerpt: document.getElementById("new-blog-excerpt").value.trim(),
+            body,
+            date: new Date().toISOString().slice(0, 10),
+            published: document.getElementById("new-blog-published").checked
+          });
+          if (res.success) {
+            Toast.show("Post saved!", "success");
+            location.reload();
+          } else {
+            Toast.show(`Error: ${res.error || "Save failed"}`, "error");
+          }
+        } finally {
+          createBlogBtn.disabled = false;
+        }
+      });
+    }
+
     // Blog actions
     document.querySelectorAll("[data-blog-action]").forEach(btn => {
       btn.addEventListener("click", async () => {
