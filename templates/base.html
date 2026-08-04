@@ -4,7 +4,19 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}QalamStudio{% endblock %} — Pakistan's AI Writing Studio</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>✍️</text></svg>">
+
+  <!-- Favicons -->
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicons/favicon.ico') }}">
+  <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicons/favicon-16x16.png') }}">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicons/favicon-32x32.png') }}">
+  <link rel="icon" type="image/png" sizes="96x96" href="{{ url_for('static', filename='favicons/favicon-96x96.png') }}">
+  <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='favicons/apple-touch-icon.png') }}">
+  <link rel="manifest" href="{{ url_for('static', filename='favicons/site.webmanifest') }}">
+  <meta name="theme-color" content="#000000">
+
+  <!-- Google Search Console: paste the code Google gives you into this content= value -->
+  <meta name="google-site-verification" content="{{ google_site_verification_code|default('') }}">
+
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <script>
     window.IS_PRO = {{ 'true' if is_pro else 'false' }};
@@ -44,7 +56,10 @@
   <div class="page-wrapper">
     <!-- Navigation -->
     <nav class="nav-floating">
-      <a href="{{ url_for('landing') }}" class="nav-logo">✍️ QalamStudio</a>
+      <a href="{{ url_for('landing') }}" class="nav-logo" style="display:flex;align-items:center;gap:8px;">
+        <img src="{{ url_for('static', filename='favicons/logo-mark.png') }}" alt="" width="24" height="24" style="display:block;">
+        QalamStudio
+      </a>
       <div class="nav-links">
         <a href="{{ url_for('landing') }}" class="nav-link {% if request.endpoint == 'landing' %}active{% endif %}">Home</a>
         <a href="{{ url_for('urdu_writer') }}" class="nav-link {% if request.endpoint == 'urdu_writer' %}active{% endif %}">Urdu Writer</a>
