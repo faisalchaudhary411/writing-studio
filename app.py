@@ -9,7 +9,6 @@ from flask import (
     Flask, render_template, request, session, redirect, url_for,
     flash, jsonify, abort, send_from_directory
 )
-from flask_session import Session
 import requests as req
 
 load_dotenv()
@@ -18,9 +17,14 @@ load_dotenv()
 # CONFIGURATION
 # ──────────────────────────────────────────────────────────────────────
 class Config:
-    SECRET_KEY = os.environ.get("SECRET_KEY", os.urandom(32).hex())
-    SESSION_TYPE = "filesystem"
-    SESSION_FILE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "flask_session")
+    # BUG FIX: the old fallback was os.urandom(32).hex() — meaning if
+    # SECRET_KEY wasn't actually set as an env var, EVERY worker process
+    # would generate its OWN random secret independently at startup. With
+    # `--workers 2`, that means session cookies signed by worker A wouldn't
+    # verify on worker B, silently invalidating sessions on roughly half of
+    # all requests. A static fallback (like VoxCraft uses) is safer — still
+    # insecure if left unset in production, but at least consistent.
+    SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-change-me")
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB uploads
     GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
     ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", hashlib.sha256(os.urandom(32)).hexdigest()[:16])
@@ -57,11 +61,30 @@ class Config:
     FREE_PRICE_LABEL = os.environ.get("FREE_PRICE_LABEL", "مفت")
     CHECKOUT_URL = os.environ.get("CHECKOUT_URL", "/request-pro")
 
-os.makedirs(Config.SESSION_FILE_DIR, exist_ok=True)
-
 app = Flask(__name__)
 app.config.from_object(Config)
-Session(app)
+
+# BUG FIX (the actual "Pro vanishes" root cause): this used to call
+# Session(app) with SESSION_TYPE="filesystem", storing session data as files
+# on local disk. Render's filesystem is EPHEMERAL — every redeploy, restart,
+# or dyno recycle wipes that directory entirely, silently logging out every
+# active user until their browser's localStorage-based restore-pro safety net
+# happens to fire (explaining why this felt intermittent rather than
+# constant — it only shows up in the gap between a restart and the next
+# page load). Nothing stored in session[] here is more than a short string
+# or boolean (see below), so there's no real reason to need server-side
+# session storage at all — switching to Flask's default signed-cookie
+# session (stored in the user's browser, not server disk) removes the
+# ephemeral-filesystem problem entirely, and matches the same fix already
+# applied to VoxCraft. Also making sessions permanent with a real expiry —
+# without this, the cookie has no explicit expiry at all, and mobile
+# browsers/OSes routinely clear that kind of cookie when backgrounded.
+app.config["PERMANENT_SESSION_LIFETIME"] = datetime.timedelta(days=90)
+
+
+@app.before_request
+def _make_session_permanent():
+    session.permanent = True
 
 # ── In-memory cache for GitHub reads (TTL 60s) ──
 _cache = {}
@@ -1501,7 +1524,10 @@ def admin_logout():
 @app.route("/admin/api/generate-key", methods=["POST"])
 @admin_required
 def admin_generate_key():
-    count = int(request.form.get("count", 1))
+    # BUG FIX: same request.form/JSON mismatch as the blog toggle/delete bug —
+    # the frontend's api() helper sends JSON, this was reading form data.
+    data = request.get_json() or {}
+    count = int(data.get("count", 1))
     keys = []
     for _ in range(min(count, 20)):
         keys.append(create_new_key())
@@ -1510,7 +1536,8 @@ def admin_generate_key():
 @app.route("/admin/api/revoke-key", methods=["POST"])
 @admin_required
 def admin_revoke_key():
-    key = request.form.get("key", "").strip()
+    data = request.get_json() or {}
+    key = data.get("key", "").strip()
     keys = _get_license_keys()
     if key in keys:
         keys[key]["revoked"] = True
@@ -1520,7 +1547,8 @@ def admin_revoke_key():
 @app.route("/admin/api/unrevoke-key", methods=["POST"])
 @admin_required
 def admin_unrevoke_key():
-    key = request.form.get("key", "").strip()
+    data = request.get_json() or {}
+    key = data.get("key", "").strip()
     keys = _get_license_keys()
     if key in keys:
         keys[key]["revoked"] = False
@@ -1530,7 +1558,8 @@ def admin_unrevoke_key():
 @app.route("/admin/api/delete-key", methods=["POST"])
 @admin_required
 def admin_delete_key():
-    key = request.form.get("key", "").strip()
+    data = request.get_json() or {}
+    key = data.get("key", "").strip()
     keys = _get_license_keys()
     if key in keys:
         del keys[key]
@@ -1540,8 +1569,9 @@ def admin_delete_key():
 @app.route("/admin/api/approve-request", methods=["POST"])
 @admin_required
 def admin_approve_request():
-    req_id = request.form.get("req_id", "").strip()
-    manual_key = request.form.get("manual_key", "").strip()
+    data = request.get_json() or {}
+    req_id = data.get("req_id", "").strip()
+    manual_key = data.get("manual_key", "").strip()
     if manual_key:
         key = manual_key
     else:
@@ -1553,7 +1583,8 @@ def admin_approve_request():
 @app.route("/admin/api/reject-request", methods=["POST"])
 @admin_required
 def admin_reject_request():
-    req_id = request.form.get("req_id", "").strip()
+    data = request.get_json() or {}
+    req_id = data.get("req_id", "").strip()
     if reject_request(req_id):
         return jsonify({"success": True})
     return jsonify({"success": False})
@@ -1561,7 +1592,8 @@ def admin_reject_request():
 @app.route("/admin/api/delete-request", methods=["POST"])
 @admin_required
 def admin_delete_request():
-    req_id = request.form.get("req_id", "").strip()
+    data = request.get_json() or {}
+    req_id = data.get("req_id", "").strip()
     all_reqs = _get_requests()
     all_reqs = [r for r in all_reqs if r["id"] != req_id]
     _save_requests(all_reqs)
