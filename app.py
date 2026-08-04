@@ -851,6 +851,7 @@ def inject_globals():
         "free_daily_actions": int(limits.get("FREE_DAILY_ACTIONS", Config.FREE_DAILY_ACTIONS)),
         "filedesk_url": Config.FILEDESK_URL,
         "year": datetime.datetime.now().year,
+        "google_site_verification_code": os.environ.get("GOOGLE_SITE_VERIFICATION", ""),
     }
 
 # ──────────────────────────────────────────────────────────────────────
@@ -895,6 +896,65 @@ def blog_post(slug):
     if not post:
         abort(404)
     return render_template("blog_post.html", post=post)
+
+@app.route("/sitemap.xml")
+def sitemap():
+    """Dynamically generated — includes every public page plus every
+    published blog post, using whatever domain the request actually came in
+    on (correct whether you're on Render's default domain or your real one,
+    no hardcoded base URL needed)."""
+    base = request.url_root.rstrip("/")
+    static_paths = [
+        ("/", "1.0", "weekly"),
+        ("/urdu-writer", "0.9", "weekly"),
+        ("/freelancer", "0.9", "weekly"),
+        ("/subtitles", "0.9", "weekly"),
+        ("/blog", "0.7", "weekly"),
+        ("/request-pro", "0.6", "monthly"),
+        ("/about", "0.4", "yearly"),
+        ("/contact", "0.4", "yearly"),
+        ("/privacy", "0.3", "yearly"),
+        ("/terms", "0.3", "yearly"),
+    ]
+    urls = [{"loc": f"{base}{path}", "priority": priority, "changefreq": freq}
+            for path, priority, freq in static_paths]
+
+    for post in _get_blog_posts():
+        if post.get("published"):
+            urls.append({
+                "loc": f"{base}/blog/{post.get('id')}",
+                "priority": "0.6",
+                "changefreq": "monthly",
+                "lastmod": post.get("date", ""),
+            })
+
+    xml_parts = ['<?xml version="1.0" encoding="UTF-8"?>',
+                 '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for u in urls:
+        xml_parts.append("  <url>")
+        xml_parts.append(f"    <loc>{u['loc']}</loc>")
+        if u.get("lastmod"):
+            xml_parts.append(f"    <lastmod>{u['lastmod']}</lastmod>")
+        xml_parts.append(f"    <changefreq>{u['changefreq']}</changefreq>")
+        xml_parts.append(f"    <priority>{u['priority']}</priority>")
+        xml_parts.append("  </url>")
+    xml_parts.append("</urlset>")
+
+    return app.response_class("\n".join(xml_parts), mimetype="application/xml")
+
+
+@app.route("/robots.txt")
+def robots_txt():
+    base = request.url_root.rstrip("/")
+    content = f"""User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api/
+
+Sitemap: {base}/sitemap.xml
+"""
+    return app.response_class(content, mimetype="text/plain")
+
 
 @app.route("/about")
 def about():
