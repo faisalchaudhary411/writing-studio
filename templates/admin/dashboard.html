@@ -3,12 +3,12 @@
 {% block title %}Admin Panel{% endblock %}
 
 {% block content %}
-<section style="padding: 7rem 0 2rem">
+<section style="padding: 3rem 0 2rem">
   <div class="container">
     <div class="admin-header">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem">
         <div>
-          <h1 style="font-family:'Syne',sans-serif;font-weight:800;color:#ffd700;font-size:1.5rem">⚙️ Admin Panel</h1>
+          <h1 style="font-family:var(--font-display);font-weight:600;color:var(--accent-secondary);font-size:1.5rem">⚙️ Admin Panel</h1>
           <p style="color:var(--text-muted);font-size:0.8rem;margin-top:0.3rem">{{ now.strftime('%d %b %Y, %H:%M') if now else '' }}</p>
         </div>
         <a href="{{ url_for('admin_logout') }}" class="btn btn-danger btn-sm">🔓 Logout</a>
@@ -37,7 +37,7 @@
 
     <!-- GitHub Status -->
     <div class="glass-panel mt-3">
-      <h3 style="font-family:'Syne',sans-serif;font-weight:700;color:var(--text-primary);font-size:1rem;margin-bottom:1rem">🔗 GitHub Sync</h3>
+      <h3 style="font-family:var(--font-display);font-weight:600;color:var(--text-primary);font-size:1rem;margin-bottom:1rem">🔗 GitHub Sync</h3>
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem">
         <span class="status-badge {{ 'status-approved' if gh_token_set else 'status-rejected' }}">GitHub {{ '✓' if gh_token_set else '✗' }}</span>
         <span class="status-badge {{ 'status-approved' if resend_set else 'status-rejected' }}">Resend {{ '✓' if resend_set else '✗' }}</span>
@@ -50,7 +50,7 @@
 
     <!-- License Key Manager -->
     <div class="glass-panel mt-3">
-      <h3 style="font-family:'Syne',sans-serif;font-weight:700;color:var(--text-primary);font-size:1.2rem;margin-bottom:0.2rem">🔑 License Key Manager</h3>
+      <h3 style="font-family:var(--font-display);font-weight:600;color:var(--text-primary);font-size:1.2rem;margin-bottom:0.2rem">🔑 License Key Manager</h3>
       <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:1rem">One-time use keys. Each key can only be activated once.</p>
       <div style="display:flex;gap:0.75rem;margin-bottom:1.5rem;flex-wrap:wrap">
         <input type="number" class="form-input" id="key-count" value="1" min="1" max="20" style="width:100px">
@@ -66,11 +66,17 @@
             {% set css = 'revoked' if is_revoked else 'used' if is_used else 'fresh' %}
             <div class="key-row {{ css }}">
               <code style="font-size:0.8rem;word-break:break-all">{{ key }}</code>
+              {% if info.get('restore_log') %}
+                <span style="font-size:0.7rem;color:var(--text-muted)" title="Silent auto-restore events">🔄 {{ info.restore_log|length }}</span>
+              {% endif %}
               <div style="display:flex;gap:0.5rem;flex-shrink:0">
                 {% if not is_revoked %}
                   <button class="btn btn-danger btn-sm" data-key-action="revoke" data-key="{{ key }}">🚫 Revoke</button>
                 {% else %}
                   <button class="btn btn-primary btn-sm" data-key-action="unrevoke" data-key="{{ key }}">✅ Un-revoke</button>
+                {% endif %}
+                {% if is_used %}
+                  <button class="btn btn-sm" data-key-action="reset-device" data-key="{{ key }}" title="Clear device history so the customer can reactivate from a new device/browser">🔓 Reset Device</button>
                 {% endif %}
                 <button class="btn btn-danger btn-sm" data-key-action="delete" data-key="{{ key }}">🗑 Delete</button>
               </div>
@@ -84,7 +90,7 @@
 
     <!-- Pricing & Limits -->
     <div class="glass-panel mt-3">
-      <h3 style="font-family:'Syne',sans-serif;font-weight:700;color:var(--text-primary);font-size:1.2rem;margin-bottom:0.2rem">💰 Pricing & Limits</h3>
+      <h3 style="font-family:var(--font-display);font-weight:600;color:var(--text-primary);font-size:1.2rem;margin-bottom:0.2rem">💰 Pricing & Limits</h3>
       <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:1rem">Changes save to GitHub instantly.</p>
       <div class="grid-2">
         <div class="form-group">
@@ -121,11 +127,11 @@
 
     <!-- Blog Manager -->
     <div class="glass-panel mt-3">
-      <h3 style="font-family:'Syne',sans-serif;font-weight:700;color:var(--text-primary);font-size:1.2rem;margin-bottom:0.2rem">📝 Blog Manager</h3>
+      <h3 style="font-family:var(--font-display);font-weight:600;color:var(--text-primary);font-size:1.2rem;margin-bottom:0.2rem">📝 Blog Manager</h3>
       <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:1rem">{{ posts|length }} total posts</p>
 
       <!-- Write new post -->
-      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:1rem;margin-bottom:1.2rem;">
+      <div style="background:rgba(33,26,18,0.03);border:1px solid rgba(33,26,18,0.10);border-radius:12px;padding:1rem;margin-bottom:1.2rem;">
         <div style="font-weight:600;color:var(--text-primary);font-size:0.95rem;margin-bottom:0.8rem;">✍️ Write new post</div>
         <div class="form-group">
           <label class="form-label">Title</label>
@@ -170,7 +176,7 @@
 
     <!-- Pro Requests -->
     <div class="glass-panel mt-3">
-      <h3 style="font-family:'Syne',sans-serif;font-weight:700;color:var(--text-primary);font-size:1.2rem;margin-bottom:0.2rem">🚀 Pro Requests</h3>
+      <h3 style="font-family:var(--font-display);font-weight:600;color:var(--text-primary);font-size:1.2rem;margin-bottom:0.2rem">🚀 Pro Requests</h3>
       <div style="display:flex;gap:1rem;margin-bottom:1rem">
         <div class="kpi-card" style="flex:1">
           <div class="kpi-value" style="color:var(--warning)">{{ pending|length }}</div>
@@ -200,7 +206,7 @@
               <div style="display:flex;align-items:center;gap:0.5rem;width:100%;flex-wrap:wrap">
                 <span class="status-badge status-pending">Pending</span>
                 {% if req.auto_approved %}
-                  <span class="status-badge status-approved" style="background:rgba(0,200,150,0.1);color:#00c896;border-color:rgba(0,200,150,0.2)">⚡ Auto-Approved</span>
+                  <span class="status-badge status-approved" style="background:rgba(63,107,74,0.1);color:var(--success);border-color:rgba(63,107,74,0.25)">⚡ Auto-Approved</span>
                 {% endif %}
                 <strong style="color:var(--text-primary)">{{ req.name }}</strong>
                 <span style="color:var(--text-muted);font-size:0.75rem;margin-left:auto">{{ req.date }}</span>
@@ -230,7 +236,7 @@
               <div style="display:flex;align-items:center;gap:0.5rem;width:100%;flex-wrap:wrap">
                 <span class="status-badge status-approved">Approved</span>
                 {% if req.auto_approved %}
-                  <span class="status-badge" style="background:rgba(0,200,150,0.1);color:#00c896;border-color:rgba(0,200,150,0.2)">⚡ Auto</span>
+                  <span class="status-badge" style="background:rgba(63,107,74,0.1);color:var(--success);border-color:rgba(63,107,74,0.25)">⚡ Auto</span>
                 {% endif %}
                 <strong style="color:var(--text-primary)">{{ req.name }}</strong>
                 <span style="color:var(--text-muted);font-size:0.75rem;margin-left:auto">{{ req.approved_date or req.date }}</span>
