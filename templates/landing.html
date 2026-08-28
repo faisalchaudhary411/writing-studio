@@ -3,16 +3,20 @@
 {% block content %}
 <!-- Hero -->
 <section class="hero">
+  <span class="hero-watermark" aria-hidden="true">قلم</span>
   <div class="container">
-    <div class="hero-badge">🖊️ Pakistan's Free AI Writing Studio</div>
-    <h1 class="hero-title">Write in Urdu.<br>Work Smarter.<br>Get Paid Faster.</h1>
+    <div class="hero-badge">Pakistan's Free AI Writing Studio</div>
+    <h1 class="hero-title">Write in Urdu.<br>Work <em>smarter.</em><br>Get paid faster.</h1>
+    <svg class="hero-stroke" viewBox="0 0 360 20" aria-hidden="true">
+      <path d="M4,14 C60,4 110,18 160,10 C210,2 260,16 356,6" />
+    </svg>
     <p class="hero-subtitle">AI Urdu writer · Freelancer toolkit · Subtitle generator · File converter<br>All free. No signup. No credit card.</p>
     <div class="hero-actions">
-      <a href="{{ url_for('urdu_writer') }}" class="btn btn-primary btn-lg">✍️ Urdu Writer</a>
-      <a href="{{ url_for('freelancer') }}" class="btn btn-secondary btn-lg">💼 Freelancer</a>
-      <a href="{{ url_for('subtitles') }}" class="btn btn-secondary btn-lg">🎬 Subtitles</a>
+      <a href="{{ url_for('urdu_writer') }}" class="btn btn-primary btn-lg">Urdu Writer</a>
+      <a href="{{ url_for('freelancer') }}" class="btn btn-secondary btn-lg">Freelancer</a>
+      <a href="{{ url_for('subtitles') }}" class="btn btn-secondary btn-lg">Subtitles</a>
       {% if filedsk_url %}
-      <a href="{{ url_for('filedsk') }}" class="btn btn-secondary btn-lg">📁 FileDesk</a>
+      <a href="{{ url_for('filedsk') }}" class="btn btn-secondary btn-lg">FileDesk</a>
       {% endif %}
     </div>
   </div>
@@ -26,13 +30,13 @@
         <div class="card-icon">✍️</div>
         <div class="card-title">Urdu AI Writer</div>
         <div class="card-desc">Blogs, scripts & captions in natural Pakistani Urdu — not robotic translation.</div>
-        <span class="card-link">Start Writing →</span>
+        <span class="card-link">Start writing →</span>
       </a>
       <a href="{{ url_for('freelancer') }}" class="card" style="text-decoration:none">
         <div class="card-icon">💼</div>
         <div class="card-title">Freelancer Toolkit</div>
         <div class="card-desc">Proposals, invoices & client emails that win projects on Fiverr, Upwork & beyond.</div>
-        <span class="card-link">Explore Tools →</span>
+        <span class="card-link">Explore tools →</span>
       </a>
       <a href="{{ url_for('subtitles') }}" class="card" style="text-decoration:none">
         <div class="card-icon">🎬</div>
@@ -56,7 +60,7 @@
 <section style="padding: 2rem 0 4rem">
   <div class="container">
     <div class="section-header text-center">
-      <h2 class="section-title">Simple Pricing</h2>
+      <h2 class="section-title">Simple pricing</h2>
       <p class="section-subtitle" style="margin:0 auto">Start free. Upgrade when you need more power.</p>
     </div>
     <div class="pricing-grid">
@@ -70,7 +74,7 @@
         </ul>
       </div>
       <div class="pricing-card pro">
-        <div class="pricing-label pro">⭐ Studio Pro</div>
+        <div class="pricing-label pro">Studio Pro</div>
         <div class="pricing-price">{{ pro_price_label }}<span>/mo</span></div>
         <ul class="pricing-features">
           {% for f in pro_features %}
@@ -88,7 +92,7 @@
   <div class="container text-center">
     <div class="glass-panel" style="display:inline-flex;align-items:center;gap:1.5rem;flex-wrap:wrap;justify-content:center">
       {% if is_pro %}
-        <span class="stat-pill pro">⭐ Pro Active — Unlimited</span>
+        <span class="stat-pill pro">Pro Active — Unlimited</span>
       {% else %}
         <div style="display:flex;align-items:center;gap:0.75rem">
           <div class="progress-ring">
@@ -99,7 +103,7 @@
             <span class="progress-ring-text" id="actions-left">{{ actions_left }}</span>
           </div>
           <div style="text-align:left">
-            <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary)">Free Actions Left</div>
+            <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary)">Free actions left</div>
             <div style="font-size:0.75rem;color:var(--text-muted)">Resets daily at midnight</div>
           </div>
         </div>

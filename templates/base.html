@@ -12,7 +12,8 @@
   <link rel="icon" type="image/png" sizes="96x96" href="{{ url_for('static', filename='favicons/favicon-96x96.png') }}">
   <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='favicons/apple-touch-icon.png') }}">
   <link rel="manifest" href="{{ url_for('static', filename='favicons/site.webmanifest') }}">
-  <meta name="theme-color" content="#000000">
+  <meta name="theme-color" content="#211A12">
+  {% if session.get('admin_auth') %}<meta name="csrf-token" content="{{ csrf_token() }}">{% endif %}
 
   <!-- Google Search Console: paste the code Google gives you into this content= value -->
   <meta name="google-site-verification" content="{{ google_site_verification_code|default('') }}">
@@ -50,14 +51,11 @@
   {% endif %}
 </head>
 <body>
-  <canvas id="aurora-canvas"></canvas>
-  <canvas id="particle-canvas"></canvas>
-
   <div class="page-wrapper">
     <!-- Navigation -->
     <nav class="nav-floating">
       <a href="{{ url_for('landing') }}" class="nav-logo" style="display:flex;align-items:center;gap:8px;">
-        <img src="{{ url_for('static', filename='favicons/logo-mark.png') }}" alt="" width="24" height="24" style="display:block;">
+        <img src="{{ url_for('static', filename='favicons/logo-mark.png') }}" alt="" width="22" height="22" style="display:block;">
         QalamStudio
       </a>
       <div class="nav-links">
@@ -78,7 +76,7 @@
 
     <!-- Adsterra Banner Ad — only for free users -->
     {% if not is_pro %}
-    <div style="text-align:center;padding-top:5.5rem;padding-bottom:0;">
+    <div style="text-align:center;padding-top:0.5rem;padding-bottom:0;">
       <iframe src="{{ url_for('ads_slot', slot='banner') }}" style="width:100%;max-width:468px;height:90px;border:0;" scrolling="no"></iframe>
     </div>
     {% endif %}
@@ -109,18 +107,18 @@
     <!-- License Trigger -->
     {% if not is_pro %}
     <div class="license-trigger" onclick="document.getElementById('license-modal').classList.add('active')">
-      🔑 Have a Pro key?
+      Have a Pro key?
     </div>
     {% else %}
     <div class="license-trigger" onclick="document.getElementById('deactivate-pro-btn').click()">
-      ⭐ Pro Active — Click to deactivate
+      Pro Active — Click to deactivate
     </div>
     {% endif %}
 
     <!-- License Modal -->
     <div class="modal-overlay" id="license-modal">
       <div class="modal">
-        <h3 style="font-family:'Syne',sans-serif;font-weight:700;margin-bottom:1rem;color:var(--text-primary)">🔑 Activate Pro License</h3>
+        <h3 style="font-family:var(--font-display);font-weight:600;margin-bottom:1rem;color:var(--text-primary)">Activate Pro License</h3>
         {% if not is_pro %}
           <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:1rem">Enter your license key to unlock unlimited access.</p>
           <div class="form-group">

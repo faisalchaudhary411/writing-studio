@@ -3,20 +3,20 @@
 {% block title %}Blog{% endblock %}
 
 {% block content %}
-<section style="padding: 7rem 0 2rem">
+<section style="padding: 3rem 0 2rem">
   <div class="container">
     <div class="section-header">
-      <h1 class="section-title">📝 Blog</h1>
+      <h1 class="section-title">Blog</h1>
       <p class="section-subtitle">Tips, guides, and stories for Pakistani creators.</p>
     </div>
 
     {% if posts %}
       <div class="blog-grid">
         {% for post in posts %}
-          {% set colors = {'Guide':'#00c896','Tutorial':'#3b82f6','News':'#f59e0b','Tips':'#a78bfa','Case Study':'#ec4899'} %}
+          {% set colors = {'Guide':'#9C6B2E','Tutorial':'#7C2A2E','News':'#A6752A','Tips':'#3F6B4A','Case Study':'#963232'} %}
           <a href="{{ url_for('blog_post', slug=post.id) }}" class="blog-card" style="text-decoration:none">
             <div class="blog-card-body">
-              <span class="blog-category" style="background:{{ colors.get(post.category, '#64748b') }}20;color:{{ colors.get(post.category, '#64748b') }};border:1px solid {{ colors.get(post.category, '#64748b') }}30">{{ post.category }}</span>
+              <span class="blog-category" style="background:{{ colors.get(post.category, '#59492F') }}1a;color:{{ colors.get(post.category, '#59492F') }};border:1px solid {{ colors.get(post.category, '#59492F') }}40">{{ post.category }}</span>
               <div class="blog-title">{{ post.title }}</div>
               <div class="blog-excerpt">{{ post.excerpt or post.body[:120] }}...</div>
               <div class="blog-meta">{{ post.date }}</div>
@@ -27,7 +27,7 @@
     {% else %}
       <div class="glass-panel text-center" style="padding: 4rem 2rem">
         <div style="font-size: 3rem; margin-bottom: 1rem">📝</div>
-        <h3 style="font-family:'Syne',sans-serif;color:var(--text-primary);margin-bottom:0.5rem">No posts yet</h3>
+        <h3 style="font-family:var(--font-display);font-weight:600;color:var(--text-primary);margin-bottom:0.5rem">No posts yet</h3>
         <p style="color:var(--text-secondary)">Check back soon for fresh content!</p>
       </div>
     {% endif %}
