@@ -2,13 +2,14 @@
 # QALAM STUDIO — Flask Edition
 # v4.0 — Unique glassmorphism design · Full feature parity
 # ══════════════════════════════════════════════════════════════════════
-import os, json, base64, time, hashlib, random, string, datetime, threading
+import os, json, base64, time, hashlib, hmac, secrets, random, string, re, datetime, threading
 from functools import wraps
 from dotenv import load_dotenv
 from flask import (
     Flask, render_template, request, session, redirect, url_for,
     flash, jsonify, abort, send_from_directory
 )
+from werkzeug.middleware.proxy_fix import ProxyFix
 import requests as req
 
 load_dotenv()
@@ -17,14 +18,23 @@ load_dotenv()
 # CONFIGURATION
 # ──────────────────────────────────────────────────────────────────────
 class Config:
-    # BUG FIX: the old fallback was os.urandom(32).hex() — meaning if
-    # SECRET_KEY wasn't actually set as an env var, EVERY worker process
-    # would generate its OWN random secret independently at startup. With
-    # `--workers 2`, that means session cookies signed by worker A wouldn't
-    # verify on worker B, silently invalidating sessions on roughly half of
-    # all requests. A static fallback (like VoxCraft uses) is safer — still
-    # insecure if left unset in production, but at least consistent.
-    SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-change-me")
+    # SECURITY: fail hard at import time if SECRET_KEY isn't set in a real
+    # deployment. The old fallback (a random value generated per-worker, or
+    # later a static "dev-secret-change-me" string) meant either sessions
+    # broke silently across gunicorn workers, or every deployment everywhere
+    # shared the same publicly-known signing key. Same fix as VoxCraft:
+    # require the env var to be set outside local dev, so a missing secret
+    # is a loud startup crash instead of a silent, exploitable weakness.
+    SECRET_KEY = os.environ.get("SECRET_KEY")
+    if not SECRET_KEY:
+        if os.environ.get("FLASK_ENV") == "development" or os.environ.get("QALAM_ALLOW_DEV_SECRET") == "1":
+            SECRET_KEY = "dev-secret-change-me"
+        else:
+            raise RuntimeError(
+                "SECRET_KEY environment variable is not set. Refusing to start "
+                "with an insecure default in production. Set SECRET_KEY, or set "
+                "QALAM_ALLOW_DEV_SECRET=1 for local development only."
+            )
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB uploads
     GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
     ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", hashlib.sha256(os.urandom(32)).hexdigest()[:16])
@@ -64,6 +74,20 @@ class Config:
 app = Flask(__name__)
 app.config.from_object(Config)
 
+# ProxyFix: Render terminates TLS at its edge and forwards over plain HTTP
+# to the app, setting X-Forwarded-Proto so Flask can tell the request was
+# actually HTTPS (needed for the Secure cookie flag and url_for(_external)
+# to generate https:// links instead of http://).
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+# SECURITY: session cookie hardening. Secure requires HTTPS (true once on the
+# VPS behind Nginx+Certbot; set QALAM_INSECURE_COOKIES=1 only for local http
+# dev). HttpOnly blocks JS access (XSS mitigation). SameSite=Lax blocks most
+# cross-site request forgery vectors for a same-origin cookie-based session.
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = os.environ.get("QALAM_INSECURE_COOKIES") != "1"
+
 # BUG FIX (the actual "Pro vanishes" root cause): this used to call
 # Session(app) with SESSION_TYPE="filesystem", storing session data as files
 # on local disk. Render's filesystem is EPHEMERAL — every redeploy, restart,
@@ -85,6 +109,37 @@ app.config["PERMANENT_SESSION_LIFETIME"] = datetime.timedelta(days=90)
 @app.before_request
 def _make_session_permanent():
     session.permanent = True
+
+# ──────────────────────────────────────────────────────────────────────
+# CSRF PROTECTION (admin panel)
+# ──────────────────────────────────────────────────────────────────────
+# Session-token based, matching VoxCraft: every admin-authenticated POST
+# (the /admin/api/* dashboard actions and the /admin login form itself) must
+# carry a token that was minted for this session. This defeats CSRF because
+# a malicious third-party site can make the browser send the admin's
+# cookies automatically, but it can't read or forge the token value, which
+# never leaves the dashboard page except as a hidden form/header field.
+# The public /api/* routes (restore-pro, activate-license, etc.) and
+# /webhook/* (HMAC-signature-verified separately) are exempt.
+def _get_csrf_token():
+    if "_csrf_token" not in session:
+        session["_csrf_token"] = secrets.token_hex(32)
+    return session["_csrf_token"]
+
+app.jinja_env.globals["csrf_token"] = _get_csrf_token
+
+@app.before_request
+def _csrf_protect():
+    if request.method != "POST":
+        return
+    path = request.path
+    if path.startswith("/api/") or path.startswith("/webhook/"):
+        return
+    if path == "/admin" or path.startswith("/admin/api/"):
+        sent = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token", "")
+        expected = session.get("_csrf_token", "")
+        if not expected or not sent or not hmac.compare_digest(sent, expected):
+            abort(403)
 
 # ── In-memory cache for GitHub reads (TTL 60s) ──
 _cache = {}
@@ -159,6 +214,90 @@ def _ensure_file(filename, default_data, repo=None):
         return default_data
     return data
 
+# ──────────────────────────────────────────────────────────────────────
+# ATOMIC TRANSACTIONS (GitHub Contents API compare-and-swap)
+# ──────────────────────────────────────────────────────────────────────
+# GitHub's Contents API already gives us a real concurrency primitive: every
+# write must include the `sha` of the version it's replacing, and GitHub
+# rejects the write (409/422) if that sha is stale — i.e. someone else wrote
+# in between. _gh_write() wasn't using this properly for read-modify-write
+# sequences: callers would read (possibly from the 60s in-memory cache),
+# mutate a Python dict, then write — with no guarantee the thing they read
+# was still current, and no retry if the write got rejected. Two requests
+# racing to activate the same key could both read used=False, both flip it
+# locally, and both be told "valid": True by activate_license() even though
+# only one of their writes could actually land — the loser would silently
+# lose Pro status the next time their key was re-checked. This mirrors the
+# exact bug VoxCraft's atomic license_key_transaction() was built to close.
+def _gh_read_fresh(filename, repo=None):
+    """Like _gh_read but always hits the API (never the cache) and also
+    returns the current sha, for use inside a CAS transaction."""
+    repo = repo or Config.GH_REPO
+    tok = Config.GITHUB_TOKEN
+    if not tok:
+        return None, None
+    h = {"Authorization": f"Bearer {tok}", "Accept": "application/vnd.github.v3+json"}
+    try:
+        r = req.get(
+            f"https://api.github.com/repos/{repo}/contents/{filename}?ref={Config.GH_BRANCH}",
+            headers=h, timeout=10
+        )
+        if r.status_code == 200:
+            j = r.json()
+            data = json.loads(base64.b64decode(j["content"]).decode("utf-8"))
+            return data, j.get("sha")
+        return None, None
+    except Exception:
+        return None, None
+
+def _gh_write_cas(filename, data, sha, msg, repo=None):
+    """Compare-and-swap write: only succeeds if `sha` still matches what's
+    live on GitHub right now. Returns (ok, was_conflict, err)."""
+    repo = repo or Config.GH_REPO
+    tok = Config.GITHUB_TOKEN
+    if not tok:
+        return False, False, "GITHUB_TOKEN missing"
+    h = {"Authorization": f"Bearer {tok}", "Accept": "application/vnd.github.v3+json"}
+    try:
+        encoded = base64.b64encode(json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")).decode("utf-8")
+        payload = {"message": msg, "content": encoded, "branch": Config.GH_BRANCH}
+        if sha:
+            payload["sha"] = sha
+        pr = req.put(
+            f"https://api.github.com/repos/{repo}/contents/{filename}",
+            headers=h, json=payload, timeout=15
+        )
+        if pr.status_code in (200, 201):
+            _cache[f"{repo}/{filename}"] = (data, time.time())
+            return True, False, "OK"
+        if pr.status_code in (409, 422):
+            return False, True, f"Conflict: {pr.text[:200]}"
+        return False, False, f"GitHub PUT {pr.status_code}: {pr.text[:300]}"
+    except Exception as e:
+        return False, False, f"Exception: {str(e)}"
+
+def _gh_transact(filename, mutate_fn, msg, repo=None, max_retries=5):
+    """Atomic read-modify-write. `mutate_fn(fresh_data)` must return
+    (new_data, result) — return result=None to abort without writing (e.g.
+    a precondition, like "key not already used", no longer holds once we
+    have a fresh read). Retries with backoff on a genuine sha conflict
+    (someone else wrote in between); gives up immediately on a real error
+    (missing token, network failure) rather than retrying forever."""
+    for attempt in range(max_retries):
+        data, sha = _gh_read_fresh(filename, repo)
+        if data is None:
+            data = {}
+        new_data, result = mutate_fn(data)
+        if result is None:
+            return None
+        ok, conflict, err = _gh_write_cas(filename, new_data, sha, msg, repo)
+        if ok:
+            return result
+        if not conflict:
+            return None
+        time.sleep(0.15 * (attempt + 1))
+    return None
+
 # Initialize files
 _ensure_file(_F_REQUESTS, [])
 _ensure_file(_F_KEYS, {})
@@ -178,14 +317,45 @@ _ensure_file(_F_LIMITS, {
 # HELPERS
 # ──────────────────────────────────────────────────────────────────────
 def _get_user_ip():
-    if request.headers.get("X-Forwarded-For"):
-        return request.headers.get("X-Forwarded-For").split(",")[0].strip()
-    if request.headers.get("X-Real-Ip"):
-        return request.headers.get("X-Real-Ip")
+    # SECURITY FIX (Render-specific — different from the Nginx/VoxCraft
+    # setup, which uses X-Real-IP): Render sits behind Cloudflare at its own
+    # edge and sets True-Client-IP there, which a client cannot forge — this
+    # plays the same trusted-header role X-Real-IP plays behind Nginx.
+    # Render never rewrites X-Forwarded-For, only appends to it, so if
+    # True-Client-IP isn't present the RIGHTMOST entry in X-Forwarded-For is
+    # the one Render's own proxy added (trustworthy); the LEFTMOST entry is
+    # whatever the client sent and is fully spoofable — the old code took
+    # the leftmost entry, which let anyone fake their IP by just setting
+    # the header themselves.
+    true_client_ip = request.headers.get("True-Client-IP")
+    if true_client_ip:
+        return true_client_ip.strip()
+    xff = request.headers.get("X-Forwarded-For", "")
+    if xff:
+        parts = [p.strip() for p in xff.split(",") if p.strip()]
+        if parts:
+            return parts[-1]
     return request.remote_addr or "unknown"
 
 def _hash_ip(ip: str) -> str:
     return hashlib.sha256(ip.encode()).hexdigest()[:16]
+
+def _get_browser_fingerprint() -> str:
+    """Server-side device fingerprint built from request headers — no
+    client-side JS/consent needed. Version numbers are stripped from the
+    User-Agent before hashing: Chrome silently bumps its version string
+    every few weeks on auto-update, and hashing the raw UA would treat that
+    as a brand-new device, breaking device binding for most users roughly
+    monthly. Combining the version-stripped UA with Accept-Language and the
+    Client-Hints platform header (when the browser sends one) gives a
+    reasonably stable per-browser-install signal. Same approach as
+    VoxCraft's fingerprinting fix."""
+    ua = request.headers.get("User-Agent", "")
+    ua_stable = re.sub(r'[\d]+(\.[\d]+)*', '', ua)  # "Chrome/125.0.6422.112" -> "Chrome/"
+    accept_lang = request.headers.get("Accept-Language", "").split(",")[0].strip()
+    platform = request.headers.get("Sec-Ch-Ua-Platform", "").strip('"')
+    raw = f"{ua_stable}|{accept_lang}|{platform}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 def _today() -> str:
     return datetime.datetime.now().strftime("%Y-%m-%d")
@@ -247,7 +417,13 @@ def create_new_key(grace_hours=None):
     key_data = {
         "used": False, "revoked": False,
         "created": _now_str(),
-        "activated_by": "", "activated_on": ""
+        "activated_by": "", "activated_on": "",
+        # Rolling device-binding history (last 5 of each signal). Seeded on
+        # first activation, extended on every OR-matched reactivation.
+        "ip_history": [], "fp_history": [],
+        # Capped log of silent auto-restore events (page-load Pro checks),
+        # visible to admin for support/abuse review.
+        "restore_log": [],
     }
     if grace_hours:
         key_data["grace_expires"] = (datetime.datetime.now() + datetime.timedelta(hours=grace_hours)).strftime("%Y-%m-%d %H:%M")
@@ -334,17 +510,33 @@ def verify_freemius_license(license_key):
     except Exception as e:
         return {"success": False, "valid": False, "error": str(e)}
 
-def check_license(key: str) -> dict:
-    """Used by /api/restore-pro to re-confirm Pro status for a device that
-    already activated this key (JS calls this on page load with the key it
-    has stored in localStorage).
+def _push_history(hist_list, value, cap=5):
+    """Append `value` to a rolling history list, deduping and capping at
+    `cap` most-recent entries. Mutates and returns the list."""
+    if not isinstance(hist_list, list):
+        hist_list = []
+    if value in hist_list:
+        hist_list.remove(value)
+    hist_list.append(value)
+    return hist_list[-cap:]
 
-    SECURITY FIX: this previously didn't verify the calling device matched
-    the one that originally activated the key — meaning anyone who obtained
-    a copy of an already-activated key (screenshot, leak, guess) could get
-    Pro on ANY device by calling this endpoint, completely bypassing the
-    one-device-per-key restriction that activate_license() enforces. Now
-    mirrors that same device check.
+def check_license(key: str) -> dict:
+    """Used by /api/restore-pro to silently re-confirm Pro status for a
+    device on page load (JS calls this automatically with the key it has
+    stored in localStorage — no user action involved).
+
+    SECURITY: this previously matched on IP alone, so anyone who obtained a
+    copy of an already-activated key could get silent Pro on ANY device by
+    hitting this endpoint. It's now also fixed to require BOTH the current
+    IP hash AND browser fingerprint to appear in the key's rolling history
+    (AND, not OR) before granting Pro without any user action — matching
+    VoxCraft's device-binding pattern. Requiring both avoids false positives
+    on shared IPs (CGNAT, office wifi, campus networks) where a stranger on
+    the same IP shouldn't silently inherit someone else's Pro status just
+    because a fingerprint happens to overlap, or vice versa. Manual
+    reactivation (typing the key back in) is deliberately more lenient —
+    see activate_license() — since a real human is present to notice if
+    something's wrong.
     """
     key = key.strip()
     keys = _get_license_keys()
@@ -353,7 +545,6 @@ def check_license(key: str) -> dict:
         return {"valid": False}
     if info.get("revoked"):
         return {"valid": False, "error": "This license has been revoked."}
-    # Check grace period for auto-approved manual payments
     if info.get("grace_expires"):
         try:
             expires = datetime.datetime.strptime(info["grace_expires"], "%Y-%m-%d %H:%M")
@@ -363,10 +554,27 @@ def check_license(key: str) -> dict:
             pass
     if not info.get("used"):
         return {"valid": False, "error": "This key hasn't been activated yet."}
+
     current_ip = _get_user_ip()
-    current_hash = _hash_ip(current_ip)
-    if current_ip == "unknown" or info.get("activated_by") != current_hash:
+    ip_hash = _hash_ip(current_ip)
+    fp_hash = _get_browser_fingerprint()
+    ip_ok = current_ip != "unknown" and ip_hash in (info.get("ip_history") or [])
+    fp_ok = fp_hash in (info.get("fp_history") or [])
+    if not (ip_ok and fp_ok):
         return {"valid": False, "error": "This key was activated on a different device."}
+
+    # Log the auto-restore event (best-effort, capped at 10) for admin
+    # visibility — doesn't block the response if the write is slow/fails.
+    def _log_restore(fresh_keys):
+        k = fresh_keys.get(key)
+        if not k:
+            return fresh_keys, None
+        log = k.get("restore_log") or []
+        log.append({"at": _now_str(), "ip": ip_hash, "fp": fp_hash})
+        k["restore_log"] = log[-10:]
+        return fresh_keys, True
+    threading.Thread(target=lambda: _gh_transact(_F_KEYS, _log_restore, "Log auto-restore"), daemon=True).start()
+
     return {"valid": True, "name": "Pro User"}
 
 def activate_license(key: str) -> dict:
@@ -385,17 +593,49 @@ def activate_license(key: str) -> dict:
         info = keys[key]
         if info.get("revoked"):
             return {"valid": False, "error": "This license key has been revoked. Contact support."}
+
+        current_ip = _get_user_ip()
+        ip_hash = _hash_ip(current_ip)
+        fp_hash = _get_browser_fingerprint()
+
         if info.get("used"):
-            current_ip = _get_user_ip()
-            current_hash = _hash_ip(current_ip)
-            if current_ip != "unknown" and info.get("activated_by") == current_hash:
+            # Manual reactivation (user typed the key back in themselves —
+            # e.g. reinstalled their browser, or is on a new device they
+            # own). Matches on EITHER signal (OR): a real person is present
+            # to notice if this rejects them incorrectly, so we can afford
+            # to be more lenient here than the silent auto-restore path.
+            ip_ok = current_ip != "unknown" and ip_hash in (info.get("ip_history") or [])
+            fp_ok = fp_hash in (info.get("fp_history") or [])
+            if ip_ok or fp_ok:
+                def _extend(fresh_keys):
+                    k = fresh_keys.get(key)
+                    if not k or k.get("revoked") or not k.get("used"):
+                        return fresh_keys, None
+                    k["ip_history"] = _push_history(k.get("ip_history"), ip_hash)
+                    k["fp_history"] = _push_history(k.get("fp_history"), fp_hash)
+                    return fresh_keys, True
+                _gh_transact(_F_KEYS, _extend, "Extend device history")
                 return {"valid": True, "name": "Pro User"}
             return {"valid": False, "error": "This key has already been used. Each key is one-time use only."}
-        keys[key]["used"] = True
-        keys[key]["activated_on"] = _now_str()
-        keys[key]["activated_by"] = _hash_ip(_get_user_ip())
-        _save_license_keys(keys)
-        return {"valid": True, "name": "Pro User"}
+
+        # First activation — CAS transaction against a FRESH read (not the
+        # `keys` snapshot above, which may be stale from the 60s cache or
+        # already out of date). Closes the race where two simultaneous
+        # first-activations of the same key could both be told they won.
+        def _claim(fresh_keys):
+            k = fresh_keys.get(key)
+            if not k or k.get("revoked") or k.get("used"):
+                return fresh_keys, None
+            k["used"] = True
+            k["activated_on"] = _now_str()
+            k["activated_by"] = ip_hash  # kept for back-compat / admin display
+            k["ip_history"] = _push_history(k.get("ip_history"), ip_hash)
+            k["fp_history"] = _push_history(k.get("fp_history"), fp_hash)
+            return fresh_keys, True
+        claimed = _gh_transact(_F_KEYS, _claim, "Activate license key")
+        if claimed:
+            return {"valid": True, "name": "Pro User"}
+        return {"valid": False, "error": "This key has already been used. Each key is one-time use only."}
 
     # Not one of ours — try it as a raw Freemius license key.
     result = verify_freemius_license(key)
@@ -704,6 +944,18 @@ def reject_request(req_id):
 # ──────────────────────────────────────────────────────────────────────
 # USAGE & LIMITS
 # ──────────────────────────────────────────────────────────────────────
+def _get_identifier_daily_usage(identifier: str) -> int:
+    """Persisted daily action count for one identifier ("ip:<hash>" or
+    "fp:<hash>"). Reads through the normal 60s _gh_read cache — enforcement
+    doesn't need millisecond freshness, just needs to survive a session
+    reset. Returns 0 if unseen or the stored record is from a previous
+    day."""
+    data = _get_usage()
+    rec = data.get(identifier)
+    if not rec or rec.get("date") != _today():
+        return 0
+    return int(rec.get("daily_actions", 0))
+
 def get_user_actions_left():
     if session.get("is_pro"):
         return 9999
@@ -713,7 +965,20 @@ def get_user_actions_left():
         session["last_action_date"] = today
     limits = _get_limits()
     free_limit = int(limits.get("FREE_DAILY_ACTIONS", Config.FREE_DAILY_ACTIONS))
-    return max(0, free_limit - session.get("daily_actions", 0))
+
+    # SECURITY FIX: this was purely session-cookie-based, so opening an
+    # incognito window (or just clearing cookies) silently reset the count
+    # to zero — the free-tier limit was trivially bypassable, same bug
+    # VoxCraft had before its fix. Now takes the MAX of the session's own
+    # count and whatever's persisted under this device's IP hash AND
+    # browser fingerprint hash: a fresh incognito session still carries the
+    # same IP and fingerprint, so it inherits the real count even though
+    # its own session cookie says zero.
+    ip_used = _get_identifier_daily_usage("ip:" + _hash_ip(_get_user_ip()))
+    fp_used = _get_identifier_daily_usage("fp:" + _get_browser_fingerprint())
+    session_used = session.get("daily_actions", 0)
+    effective_used = max(session_used, ip_used, fp_used)
+    return max(0, free_limit - effective_used)
 
 def record_action():
     if session.get("is_pro"):
@@ -723,20 +988,38 @@ def record_action():
         session["daily_actions"] = 0
         session["last_action_date"] = today
     session["daily_actions"] = session.get("daily_actions", 0) + 1
-    # Update GitHub usage tracking
-    try:
-        month = datetime.datetime.now().strftime("%Y-%m")
-        ih = _hash_ip(_get_user_ip())
-        data = _get_usage()
-        rec = data.get(ih, {"month": month, "actions_used": 0})
-        if rec.get("month") != month:
-            rec = {"month": month, "actions_used": 0}
-        rec["actions_used"] = rec.get("actions_used", 0) + 1
-        rec["month"] = month
-        data[ih] = rec
-        threading.Thread(target=lambda d: _save_usage(d), args=(data,), daemon=True).start()
-    except Exception:
-        pass
+
+    # Sync BOTH the IP-keyed and fingerprint-keyed persisted counters in the
+    # background, matching the fire-and-forget pattern already used here.
+    # This is a deliberate trade-off: a hard CAS transaction (like the
+    # license-key one) would add a real network round-trip to every single
+    # generation request and burn through GitHub's API rate limit fast at
+    # any real traffic volume. Occasionally losing one increment under
+    # concurrent load just means a user gets an extra action or two — not a
+    # security hole, unlike the license-activation race this file's
+    # sibling _gh_transact() closes.
+    ip_id = "ip:" + _hash_ip(_get_user_ip())
+    fp_id = "fp:" + _get_browser_fingerprint()
+    month = datetime.datetime.now().strftime("%Y-%m")
+
+    def _sync_usage():
+        try:
+            data = _get_usage()
+            for identifier in (ip_id, fp_id):
+                rec = data.get(identifier, {})
+                if rec.get("date") != today:
+                    rec = {"date": today, "daily_actions": 0}
+                rec["daily_actions"] = rec.get("daily_actions", 0) + 1
+                rec["date"] = today
+                if rec.get("month") != month:
+                    rec["actions_used"] = 0
+                rec["actions_used"] = rec.get("actions_used", 0) + 1
+                rec["month"] = month
+                data[identifier] = rec
+            _save_usage(data)
+        except Exception:
+            pass
+    threading.Thread(target=_sync_usage, daemon=True).start()
     return True
 
 def can_act():
@@ -1486,8 +1769,15 @@ def admin_login():
         return redirect(url_for("admin_dashboard"))
     if request.method == "POST":
         pwd = request.form.get("password", "")
-        if pwd == Config.ADMIN_PASSWORD:
+        # SECURITY: constant-time comparison. A plain `==` short-circuits on
+        # the first mismatched byte, so response timing leaks how many
+        # leading characters were correct — a timing side-channel an
+        # attacker can use to brute-force the password byte-by-byte.
+        # hmac.compare_digest always takes the same time regardless of
+        # where the strings diverge. Same fix as VoxCraft.
+        if hmac.compare_digest(pwd, Config.ADMIN_PASSWORD):
             session["admin_auth"] = True
+            session.pop("_csrf_token", None)  # rotate token after login
             return redirect(url_for("admin_dashboard"))
         flash("Wrong password", "error")
     return render_template("admin/login.html")
@@ -1554,6 +1844,29 @@ def admin_unrevoke_key():
         keys[key]["revoked"] = False
         _save_license_keys(keys)
     return jsonify({"success": True})
+
+@app.route("/admin/api/reset-device-key", methods=["POST"])
+@admin_required
+def admin_reset_device_lock():
+    """Support tool: a legitimate customer got a new phone / reinstalled
+    their browser and neither IP nor fingerprint matches their key's
+    history anymore, so activate_license()'s OR-match correctly refuses
+    them. Rather than revoke+reissue a new key (which loses their purchase
+    record), this clears the key's device history so the very next
+    activation attempt — from wherever they are — seeds it fresh. Same
+    escape hatch as VoxCraft's reset_device_lock()."""
+    data = request.get_json() or {}
+    key = data.get("key", "").strip()
+    keys = _get_license_keys()
+    if key in keys:
+        keys[key]["ip_history"] = []
+        keys[key]["fp_history"] = []
+        keys[key]["used"] = False
+        keys[key]["activated_by"] = ""
+        keys[key]["activated_on"] = ""
+        _save_license_keys(keys)
+        return jsonify({"success": True})
+    return jsonify({"success": False, "error": "Key not found"})
 
 @app.route("/admin/api/delete-key", methods=["POST"])
 @admin_required
