@@ -1,142 +1,10 @@
 /* ══════════════════════════════════════════════════════════════════════
    QALAM STUDIO — Frontend Engine
-   Aurora canvas · Particles · Magnetic UI · AJAX Generation
+   Toast system · Magnetic UI · AJAX Generation
    ══════════════════════════════════════════════════════════════════════ */
 
 (function() {
   "use strict";
-
-  // ── Aurora Gradient Canvas ──
-  function initAurora() {
-    const canvas = document.getElementById("aurora-canvas");
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    let w, h, t = 0;
-
-    function resize() {
-      w = canvas.width = window.innerWidth;
-      h = canvas.height = window.innerHeight;
-    }
-    resize();
-    window.addEventListener("resize", resize);
-
-    function noise(x, y, t) {
-      return Math.sin(x * 0.003 + t) * Math.cos(y * 0.003 - t * 0.7) *
-             Math.sin((x + y) * 0.001 + t * 0.3);
-    }
-
-    function draw() {
-      t += 0.003;
-      const imageData = ctx.createImageData(w, h);
-      const data = imageData.data;
-      for (let y = 0; y < h; y += 2) {
-        for (let x = 0; x < w; x += 2) {
-          const n = noise(x, y, t);
-          const r = Math.floor(10 + n * 8);
-          const g = Math.floor(15 + n * 25 + Math.sin(t + x * 0.001) * 10);
-          const b = Math.floor(25 + n * 15 + Math.cos(t + y * 0.001) * 8);
-          const idx = (y * w + x) * 4;
-          data[idx] = r;
-          data[idx + 1] = g;
-          data[idx + 2] = b;
-          data[idx + 3] = 255;
-          // Fill 2x2 block
-          if (x + 1 < w) {
-            data[idx + 4] = r; data[idx + 5] = g; data[idx + 6] = b; data[idx + 7] = 255;
-          }
-          if (y + 1 < h) {
-            const idx2 = ((y + 1) * w + x) * 4;
-            data[idx2] = r; data[idx2 + 1] = g; data[idx2 + 2] = b; data[idx2 + 3] = 255;
-          }
-        }
-      }
-      ctx.putImageData(imageData, 0, 0);
-      requestAnimationFrame(draw);
-    }
-    draw();
-  }
-
-  // ── Particle Network ──
-  function initParticles() {
-    const canvas = document.getElementById("particle-canvas");
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    let w, h;
-    const particles = [];
-    const PARTICLE_COUNT = 60;
-    const CONNECTION_DIST = 120;
-    const MOUSE_DIST = 150;
-    let mouse = { x: null, y: null };
-
-    function resize() {
-      w = canvas.width = window.innerWidth;
-      h = canvas.height = window.innerHeight;
-    }
-    resize();
-    window.addEventListener("resize", resize);
-
-    class Particle {
-      constructor() {
-        this.x = Math.random() * w;
-        this.y = Math.random() * h;
-        this.vx = (Math.random() - 0.5) * 0.4;
-        this.vy = (Math.random() - 0.5) * 0.4;
-        this.size = Math.random() * 2 + 1;
-      }
-      update() {
-        this.x += this.vx;
-        this.y += this.vy;
-        if (this.x < 0 || this.x > w) this.vx *= -1;
-        if (this.y < 0 || this.y > h) this.vy *= -1;
-        if (mouse.x !== null) {
-          const dx = mouse.x - this.x;
-          const dy = mouse.y - this.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < MOUSE_DIST) {
-            const force = (MOUSE_DIST - dist) / MOUSE_DIST;
-            this.vx += dx * force * 0.001;
-            this.vy += dy * force * 0.001;
-          }
-        }
-      }
-      draw() {
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(0, 200, 150, 0.4)";
-        ctx.fill();
-      }
-    }
-
-    for (let i = 0; i < PARTICLE_COUNT; i++) particles.push(new Particle());
-
-    canvas.addEventListener("mousemove", e => {
-      mouse.x = e.clientX;
-      mouse.y = e.clientY;
-    });
-    canvas.addEventListener("mouseleave", () => { mouse.x = null; mouse.y = null; });
-
-    function animate() {
-      ctx.clearRect(0, 0, w, h);
-      particles.forEach(p => { p.update(); p.draw(); });
-      for (let i = 0; i < particles.length; i++) {
-        for (let j = i + 1; j < particles.length; j++) {
-          const dx = particles[i].x - particles[j].x;
-          const dy = particles[i].y - particles[j].y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < CONNECTION_DIST) {
-            ctx.beginPath();
-            ctx.moveTo(particles[i].x, particles[i].y);
-            ctx.lineTo(particles[j].x, particles[j].y);
-            ctx.strokeStyle = `rgba(0, 200, 150, ${0.15 * (1 - dist / CONNECTION_DIST)})`;
-            ctx.lineWidth = 0.5;
-            ctx.stroke();
-          }
-        }
-      }
-      requestAnimationFrame(animate);
-    }
-    animate();
-  }
 
   // ── Toast System ──
   const Toast = {
@@ -255,10 +123,13 @@
 
   // ── API Helper ──
   async function api(endpoint, data, method = "POST") {
-    const opts = {
-      method,
-      headers: { "Content-Type": "application/json" }
-    };
+    const headers = { "Content-Type": "application/json" };
+    // CSRF: only present (and only needed) on admin-authenticated pages —
+    // the meta tag is only rendered when logged into /admin. Harmless no-op
+    // on public pages where the endpoint doesn't check for it.
+    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    if (csrfMeta) headers["X-CSRF-Token"] = csrfMeta.content;
+    const opts = { method, headers };
     if (method === "POST" && data) opts.body = JSON.stringify(data);
     try {
       const res = await fetch(endpoint, opts);
@@ -797,8 +668,6 @@
 
   // ── Initialize Everything ──
   document.addEventListener("DOMContentLoaded", () => {
-    initAurora();
-    initParticles();
     initNavScroll();
     initMobileNav();
     initTabs();
