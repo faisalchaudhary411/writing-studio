@@ -1471,7 +1471,11 @@ def about():
 # CONTACT INQUIRIES — Resend SMTP primary, Wappfly admin fallback
 # ──────────────────────────────────────────────────────────────────────
 def _send_resend_smtp(to_email, subject, text_body, reply_to=None):
-    if not Config.RESEND_API_KEY or not to_email:
+    if not Config.RESEND_API_KEY:
+        app.logger.error("Resend SMTP skipped: RESEND_API_KEY is not set")
+        return False
+    if not to_email:
+        app.logger.error("Resend SMTP skipped: no recipient email provided")
         return False
     try:
         from email.message import EmailMessage
@@ -1485,9 +1489,19 @@ def _send_resend_smtp(to_email, subject, text_body, reply_to=None):
         with smtplib.SMTP_SSL("smtp.resend.com", 465, context=ssl.create_default_context(), timeout=20) as server:
             server.login("resend", Config.RESEND_API_KEY)
             server.send_message(msg)
+        app.logger.info("Resend SMTP: sent to %s from %s", to_email, Config.CONTACT_FROM_EMAIL)
         return True
+    except smtplib.SMTPAuthenticationError as exc:
+        app.logger.error("Resend SMTP AUTH FAILED (bad RESEND_API_KEY?): %s", exc)
+        return False
+    except smtplib.SMTPSenderRefused as exc:
+        app.logger.error("Resend SMTP SENDER REFUSED (CONTACT_FROM_EMAIL=%r not verified?): %s", Config.CONTACT_FROM_EMAIL, exc)
+        return False
+    except smtplib.SMTPRecipientsRefused as exc:
+        app.logger.error("Resend SMTP RECIPIENT REFUSED (to=%r): %s", to_email, exc)
+        return False
     except Exception as exc:
-        app.logger.warning("Resend SMTP failed: %s", exc)
+        app.logger.error("Resend SMTP failed (from=%r to=%r): %s", Config.CONTACT_FROM_EMAIL, to_email, exc, exc_info=True)
         return False
 
 def _contact_auto_reply(category, name):
@@ -1551,10 +1565,12 @@ def contact():
             flash("Please write a little more detail so we can help you.", "error")
             return render_template("contact.html")
 
-        _notify_contact_inquiry(name, email, category, message, phone)
+        admin_notified = _notify_contact_inquiry(name, email, category, message, phone)
         # Automated acknowledgement for common inquiry types.
         subject, reply = _contact_auto_reply(category, name)
         _send_resend_smtp(email, subject, reply)
+        if not admin_notified:
+            app.logger.error("CONTACT FORM: admin notification failed for inquiry from %s <%s>. Check RESEND_API_KEY / CONTACT_FROM_EMAIL / ADMIN_EMAIL and Resend domain verification. Full message logged above this line.", name, email)
         flash("Thanks — your message has been received. We’ll get back to you soon.", "success")
         return redirect(url_for("contact"))
 
