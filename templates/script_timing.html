@@ -1,6 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}Voice-over Script Timing Estimator{% endblock %}
+{% block title %}Voice-over Script Timing Estimator — Free Read-Time Calculator{% endblock %}
+{% block meta_description %}Estimate voice-over and YouTube script length in minutes. Free timing tool with pacing tips for Urdu, Roman Urdu and English scripts — pairs with QalamStudio subtitles.{% endblock %}
+
+{% block structured_data %}
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"QalamStudio Script Timing Estimator","applicationCategory":"MultimediaApplication","operatingSystem":"Web","offers":{"@type":"Offer","price":"0","priceCurrency":"PKR"},"description":"Estimate spoken duration and pacing for video voice-over scripts in Urdu or English."}
+</script>
+{% endblock %}
 
 {% block content %}
 <section style="padding: 3rem 0 2rem">
@@ -54,4 +61,27 @@
     </div>
   </div>
 </section>
+
+{% set intro_heading = "Know the runtime before you hit record" %}
+{% set paragraphs = [
+  "Word count alone is not enough — Urdu narration and energetic YouTube delivery change how long a script feels. This estimator combines a clear word-based calculation with section timestamps and pacing advice so you can cut or expand before filming.",
+  "Write the script in the <a href=\"" ~ url_for('urdu_writer') ~ "\">Urdu AI Writer</a>, time it here, then build <a href=\"" ~ url_for('subtitles') ~ "\">subtitles</a> and <a href=\"" ~ url_for('youtube_seo') ~ "\">YouTube titles</a> for the same video."
+] %}
+{% include "partials/seo_intro.html" %}
+
+{% set faqs = [
+  {"q": "How accurate is the estimate?", "a": "It uses words-per-minute for your selected pace (with a slight adjustment for pure Urdu). Real delivery varies with pauses and energy — use it as a planning guide."},
+  {"q": "Can I set a target length?", "a": "Yes. Enter target minutes and the report will compare your script to that goal."},
+  {"q": "Does it rewrite my script?", "a": "It focuses on timing and section breakdown, not a full rewrite. For rewriting, use the <a href=\"" ~ url_for('urdu_writer') ~ "\">Urdu Writer</a>."},
+  {"q": "What comes next after timing?", "a": "Generate an SRT with the <a href=\"" ~ url_for('subtitles') ~ "\">Subtitle Generator</a> using the same script."}
+] %}
+{% include "partials/faq.html" %}
+
+{% set related = [
+  {"url": url_for('urdu_writer'), "icon": "✍️", "title": "Urdu Writer", "desc": "Create or shorten the script."},
+  {"url": url_for('subtitles'), "icon": "🎬", "title": "Subtitles", "desc": "Turn the script into SRT."},
+  {"url": url_for('youtube_seo'), "icon": "🚀", "title": "YouTube SEO", "desc": "Titles that match the runtime."},
+  {"url": url_for('proofread'), "icon": "📝", "title": "Proofreader", "desc": "Clean the script before recording."}
+] %}
+{% include "partials/related_tools.html" %}
 {% endblock %}

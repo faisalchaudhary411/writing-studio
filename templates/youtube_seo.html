@@ -1,6 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}YouTube Title, Description & Tags{% endblock %}
+{% block title %}YouTube SEO Generator — Titles, Description & Tags in Urdu{% endblock %}
+{% block meta_description %}Free YouTube SEO tool for Pakistani creators: generate ranking titles, descriptions, tags and hashtags in pure Urdu, Roman Urdu, English or mixed style.{% endblock %}
+
+{% block structured_data %}
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"QalamStudio YouTube SEO Generator","applicationCategory":"BusinessApplication","operatingSystem":"Web","offers":{"@type":"Offer","price":"0","priceCurrency":"PKR"},"description":"Generate YouTube titles, descriptions and tags optimized for Urdu and Pakistani audiences."}
+</script>
+{% endblock %}
 
 {% block content %}
 <section style="padding: 3rem 0 2rem">
@@ -58,4 +65,27 @@
     </div>
   </div>
 </section>
+
+{% set intro_heading = "YouTube metadata for Pakistani search & suggest" %}
+{% set paragraphs = [
+  "Strong titles and descriptions in the language your audience actually searches help more than keyword stuffing. This tool produces multiple title options, a full description, tags and hashtags for niches from tech to Islamic content.",
+  "Combine with the <a href=\"" ~ url_for('urdu_writer') ~ "\">Urdu AI Writer</a> for the script, <a href=\"" ~ url_for('subtitles') ~ "\">Subtitle Generator</a> for SRT files, and <a href=\"" ~ url_for('script_timing') ~ "\">Script Timing</a> so your video length matches the pitch."
+] %}
+{% include "partials/seo_intro.html" %}
+
+{% set faqs = [
+  {"q": "Does it work for Roman Urdu titles?", "a": "Yes — choose Roman Urdu or Mixed if that is how your audience searches on YouTube."},
+  {"q": "How many titles do I get?", "a": "Typically eight varied options (curiosity, benefit, keyword-focused) so you can A/B test."},
+  {"q": "Should tags still be used?", "a": "Tags are less critical than titles and the first lines of the description, but this tool still provides a practical set including long-tail phrases."},
+  {"q": "What about thumbnails and the video itself?", "a": "SEO metadata cannot fix a weak video. Write a solid script with the <a href=\"" ~ url_for('urdu_writer') ~ "\">Urdu Writer</a> first."}
+] %}
+{% include "partials/faq.html" %}
+
+{% set related = [
+  {"url": url_for('urdu_writer'), "icon": "✍️", "title": "Urdu Writer", "desc": "Scripts and captions for the video."},
+  {"url": url_for('subtitles'), "icon": "🎬", "title": "Subtitles", "desc": "Timed SRT in Urdu or English."},
+  {"url": url_for('script_timing'), "icon": "⏱️", "title": "Script Timing", "desc": "Match length to your title promise."},
+  {"url": url_for('proofread'), "icon": "📝", "title": "Proofreader", "desc": "Fix description typos before publish."}
+] %}
+{% include "partials/related_tools.html" %}
 {% endblock %}

@@ -1,6 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}Urdu / Bilingual Resume Builder{% endblock %}
+{% block title %}Urdu & Bilingual Resume Builder — Free CV for Freelancers{% endblock %}
+{% block meta_description %}Free resume and CV builder in English, pure Urdu, Roman Urdu or bilingual format. Built for Pakistani freelancers on Fiverr, Upwork and local job applications.{% endblock %}
+
+{% block structured_data %}
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"QalamStudio Resume Builder","applicationCategory":"BusinessApplication","operatingSystem":"Web","offers":{"@type":"Offer","price":"0","priceCurrency":"PKR"},"description":"Create professional Urdu, English or bilingual resumes online."}
+</script>
+{% endblock %}
 
 {% block content %}
 <section style="padding: 3rem 0 2rem">
@@ -86,4 +93,27 @@
     </div>
   </div>
 </section>
+
+{% set intro_heading = "CVs that work for local HR and global platforms" %}
+{% set paragraphs = [
+  "Pakistani freelancers often need both an English profile for Upwork/Fiverr and an Urdu-friendly CV for local offices. This builder turns your facts into a clean, one-page-style resume without inventing jobs you did not do.",
+  "After generating, run important lines through the <a href=\"" ~ url_for('proofread') ~ "\">Urdu Proofreader</a>. For proposals that match the CV, open the <a href=\"" ~ url_for('freelancer') ~ "\">Freelancer Toolkit</a>."
+] %}
+{% include "partials/seo_intro.html" %}
+
+{% set faqs = [
+  {"q": "Can I get a bilingual Urdu–English CV?", "a": "Yes — choose Bilingual (Urdu + English) as the language option."},
+  {"q": "Will it invent experience?", "a": "No. It only strengthens wording from the experience, education and skills you enter."},
+  {"q": "Is the output a PDF?", "a": "You get polished plain text you can paste into Google Docs, Word, or a PDF template and format."},
+  {"q": "Who is this for?", "a": "Freelancers, fresh graduates, and job seekers applying in Pakistan or on global marketplaces. Pair with <a href=\"" ~ url_for('freelancer') ~ "\">proposals</a> when pitching clients."}
+] %}
+{% include "partials/faq.html" %}
+
+{% set related = [
+  {"url": url_for('freelancer'), "icon": "💼", "title": "Freelancer Toolkit", "desc": "Proposals and client emails."},
+  {"url": url_for('proofread'), "icon": "📝", "title": "Proofreader", "desc": "Fix Urdu lines on the CV."},
+  {"url": url_for('whatsapp_replies'), "icon": "💬", "title": "WhatsApp Replies", "desc": "Follow-up messages to clients."},
+  {"url": url_for('urdu_writer'), "icon": "✍️", "title": "Urdu Writer", "desc": "Portfolio blogs and case studies."}
+] %}
+{% include "partials/related_tools.html" %}
 {% endblock %}

@@ -1,6 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}Urdu Grammar & Spell Check{% endblock %}
+{% block title %}Urdu Grammar & Spell Check — Free Online Proofreader{% endblock %}
+{% block meta_description %}Free Urdu proofreader for pure Urdu, Roman Urdu and mixed text. Fix grammar, spelling (املا) and awkward style in seconds — built for Pakistani writers.{% endblock %}
+
+{% block structured_data %}
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"QalamStudio Urdu Proofreader","applicationCategory":"UtilitiesApplication","operatingSystem":"Web","offers":{"@type":"Offer","price":"0","priceCurrency":"PKR"},"description":"Online grammar and spell checker for Pakistani Urdu and Roman Urdu."}
+</script>
+{% endblock %}
 
 {% block content %}
 <section style="padding: 3rem 0 2rem">
@@ -8,19 +15,13 @@
     <div class="section-header">
       <h1 class="section-title">📝 Urdu Proofreader</h1>
       <p class="section-subtitle">گرامر، املا اور اسلوب درست کریں — قدرتی پاکستانی اردو میں۔</p>
-      {% if is_pro %}
-        <span class="stat-pill pro">⭐ Pro — Unlimited</span>
-      {% else %}
-        <span class="stat-pill">🆓 Free — <span id="actions-left">{{ actions_left }}</span> actions left today</span>
-      {% endif %}
+      {% if is_pro %}<span class="stat-pill pro">⭐ Pro — Unlimited</span>{% else %}<span class="stat-pill">🆓 Free — <span id="actions-left">{{ actions_left }}</span> actions left today</span>{% endif %}
     </div>
-
     <div class="glass-panel" style="max-width: 800px; margin: 0 auto;">
       <div class="form-group">
         <label class="form-label">Paste your Urdu / Roman Urdu text</label>
-        <textarea class="form-textarea" id="proof-text" rows="8" placeholder="اپنا متن یہاں پیسٹ کریں... grammar، spelling اور style درست کیا جائے گا۔"></textarea>
+        <textarea class="form-textarea" id="proof-text" rows="8" placeholder="اپنا متن یہاں پیسٹ کریں..."></textarea>
       </div>
-
       <div class="grid-2">
         <div class="form-group">
           <label class="form-label">Input Language</label>
@@ -40,12 +41,33 @@
           </select>
         </div>
       </div>
-
       <button class="btn btn-primary" id="proofread-btn" style="width:100%">🔍 Proofread Text</button>
-
       <div id="proof-output" class="output-box urdu" style="display:none"></div>
       <button class="btn btn-secondary" id="download-proof-btn" data-download="#proof-output" data-filename="qalam_proofread.txt" style="width:100%;margin-top:0.75rem;display:none">📥 Download Corrected Text</button>
     </div>
   </div>
 </section>
+
+{% set intro_heading = "Online Urdu grammar and spell check" %}
+{% set paragraphs = [
+  "Whether you wrote a client email, a blog draft, or a WhatsApp broadcast, this proofreader checks <strong>spelling (املا)</strong>, grammar, and style for pure Urdu, Roman Urdu, or mixed text — without turning your voice into formal textbook Urdu.",
+  "Use “Make more natural” when AI output sounds robotic. After fixing copy, create new drafts with the <a href=\"" ~ url_for('urdu_writer') ~ "\">Urdu AI Writer</a> or shop messages with <a href=\"" ~ url_for('whatsapp_replies') ~ "\">WhatsApp Business replies</a>."
+] %}
+{% include "partials/seo_intro.html" %}
+
+{% set faqs = [
+  {"q": "Does it work with Roman Urdu?", "a": "Yes. Select Roman Urdu as the input language."},
+  {"q": "Will it change my meaning?", "a": "Full proofread may rephrase slightly for clarity. Spelling-only and grammar-only stay closer to your words."},
+  {"q": "Is there a length limit?", "a": "Very long articles should be proofread in chunks. For new content, use the <a href=\"" ~ url_for('urdu_writer') ~ "\">Urdu Writer</a>."},
+  {"q": "Can freelancers use this on client deliverables?", "a": "Yes. Also see the <a href=\"" ~ url_for('freelancer') ~ "\">Freelancer Toolkit</a>."}
+] %}
+{% include "partials/faq.html" %}
+
+{% set related = [
+  {"url": url_for('urdu_writer'), "icon": "✍️", "title": "Urdu AI Writer", "desc": "Generate fresh Urdu content from a topic."},
+  {"url": url_for('freelancer'), "icon": "💼", "title": "Freelancer Toolkit", "desc": "Proposals, invoices and client emails."},
+  {"url": url_for('whatsapp_replies'), "icon": "💬", "title": "WhatsApp Replies", "desc": "Business auto-replies in natural Urdu."},
+  {"url": url_for('resume'), "icon": "📄", "title": "Resume Builder", "desc": "Polish career copy in Urdu or English."}
+] %}
+{% include "partials/related_tools.html" %}
 {% endblock %}

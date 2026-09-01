@@ -1,13 +1,20 @@
 {% extends "base.html" %}
 
-{% block title %}Subtitle Generator{% endblock %}
+{% block title %}Urdu Subtitle Generator — Free SRT for YouTube & TikTok{% endblock %}
+{% block meta_description %}Free Urdu subtitle generator: turn scripts into timed SRT files or translate English SRT to pure Urdu / Roman Urdu. Built for Pakistani YouTube and TikTok creators.{% endblock %}
+
+{% block structured_data %}
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"QalamStudio Subtitle Generator","applicationCategory":"MultimediaApplication","operatingSystem":"Web","offers":{"@type":"Offer","price":"0","priceCurrency":"PKR"},"description":"Generate and translate Urdu SRT subtitles for YouTube and short video."}
+</script>
+{% endblock %}
 
 {% block content %}
 <section style="padding: 3rem 0 2rem">
   <div class="container">
     <div class="section-header">
       <h1 class="section-title">🎬 Urdu Subtitle Generator</h1>
-      <p class="section-subtitle">Auto-generate and translate subtitles in seconds.</p>
+      <p class="section-subtitle">Script → timed SRT, or translate English SRT to Urdu — for YouTube, TikTok & reels.</p>
       {% if is_pro %}
         <span class="stat-pill pro">⭐ Pro — Unlimited</span>
       {% else %}
@@ -81,4 +88,27 @@ Hello everyone..."></textarea>
     </div>
   </div>
 </section>
+
+{% set intro_heading = "Urdu subtitles that actually fit the video" %}
+{% set paragraphs = [
+  "Upload-ready <strong>SRT</strong> files from a plain script, or translate an English SRT into pure Urdu, Roman Urdu, or mixed style while keeping timestamps intact — critical for YouTube accessibility and watch time.",
+  "Write the voice-over first with the <a href=\"" ~ url_for('urdu_writer') ~ "\">Urdu AI Writer</a>, check duration with <a href=\"" ~ url_for('script_timing') ~ "\">Script Timing</a>, then generate titles with <a href=\"" ~ url_for('youtube_seo') ~ "\">YouTube SEO</a>."
+] %}
+{% include "partials/seo_intro.html" %}
+
+{% set faqs = [
+  {"q": "What format does this export?", "a": "Standard .SRT that works in YouTube Studio, CapCut, Premiere, and most editors."},
+  {"q": "How long can one generation be?", "a": "About 12 minutes per pass so the file stays valid. Split longer videos into segments."},
+  {"q": "Can I translate English subtitles to Urdu?", "a": "Yes — use the Translate SRT tab. Timestamps are preserved."},
+  {"q": "Should I write the script here too?", "a": "For better scripts, use the <a href=\"" ~ url_for('urdu_writer') ~ "\">Urdu Writer</a>, then paste here for timing."}
+] %}
+{% include "partials/faq.html" %}
+
+{% set related = [
+  {"url": url_for('urdu_writer'), "icon": "✍️", "title": "Urdu Writer", "desc": "Write the video script first."},
+  {"url": url_for('youtube_seo'), "icon": "🚀", "title": "YouTube SEO", "desc": "Titles, description and tags."},
+  {"url": url_for('script_timing'), "icon": "⏱️", "title": "Script Timing", "desc": "Estimate spoken length before recording."},
+  {"url": url_for('proofread'), "icon": "📝", "title": "Proofreader", "desc": "Clean subtitle lines before export."}
+] %}
+{% include "partials/related_tools.html" %}
 {% endblock %}

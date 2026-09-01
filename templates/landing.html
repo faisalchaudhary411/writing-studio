@@ -1,5 +1,26 @@
 {% extends "base.html" %}
 
+{% block title %}QalamStudio — Free AI Urdu Writer, Subtitles & Freelancer Tools{% endblock %}
+{% block title_suffix %}{% endblock %}
+{% block meta_description %}Pakistan's free AI writing studio: natural Urdu content, freelancer proposals, YouTube subtitles & SEO, resume builder, proofreader, and WhatsApp business replies. No signup required.{% endblock %}
+
+{% block structured_data %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "QalamStudio",
+  "url": "{{ request.url_root.rstrip('/') }}/",
+  "applicationCategory": "WritingApplication",
+  "operatingSystem": "Web",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "PKR" },
+  "description": "Free AI writing studio for Pakistani Urdu creators, freelancers, and YouTubers.",
+  "inLanguage": ["en", "ur"],
+  "featureList": ["Urdu AI Writer","Freelancer proposals and invoices","Urdu subtitle generator","YouTube SEO","Urdu proofreader","Resume builder","WhatsApp Business replies","Script timing estimator"]
+}
+</script>
+{% endblock %}
+
 {% block content %}
 <!-- Hero -->
 <section class="hero">
@@ -140,4 +161,20 @@
     </div>
   </div>
 </section>
+
+{% set intro_heading = "Built for how Pakistan actually writes" %}
+{% set paragraphs = [
+  "QalamStudio is a free AI writing studio focused on <strong>natural Pakistani Urdu</strong> — not stiff translations. Creators use it for YouTube scripts and captions; freelancers for proposals and invoices; shop owners for WhatsApp replies; job seekers for bilingual resumes.",
+  "Start with the <a href=\"" ~ url_for('urdu_writer') ~ "\">Urdu AI Writer</a>, polish with the <a href=\"" ~ url_for('proofread') ~ "\">proofreader</a>, ship video with <a href=\"" ~ url_for('subtitles') ~ "\">subtitles</a> and <a href=\"" ~ url_for('youtube_seo') ~ "\">YouTube SEO</a>, or close clients with the <a href=\"" ~ url_for('freelancer') ~ "\">Freelancer Toolkit</a>. Read guides on the <a href=\"" ~ url_for('blog') ~ "\">blog</a>."
+] %}
+{% include "partials/seo_intro.html" %}
+
+{% set faqs = [
+  {"q": "Is QalamStudio really free?", "a": "Yes. Core tools work without signup. Free accounts have a daily action limit; <a href=\"" ~ url_for('request_pro') ~ "\">Studio Pro</a> removes limits and ads."},
+  {"q": "Does it support Roman Urdu?", "a": "Yes across the writer, proofreader, subtitles, YouTube SEO, WhatsApp replies, and more."},
+  {"q": "Who is it for?", "a": "Pakistani YouTubers, freelancers on Fiverr/Upwork, students, and small businesses that live on WhatsApp."},
+  {"q": "How is the Urdu different from ChatGPT?", "a": "Defaults and prompts target conversational Pakistani Urdu used in Lahore, Karachi and Islamabad — fewer formal or translated-sounding lines."},
+  {"q": "Where do I learn workflows?", "a": "See the <a href=\"" ~ url_for('blog') ~ "\">blog</a> for step-by-step guides that link each tool, and the <a href=\"" ~ url_for('about') ~ "\">about</a> page for our mission."}
+] %}
+{% include "partials/faq.html" %}
 {% endblock %}

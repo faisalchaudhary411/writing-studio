@@ -1,23 +1,45 @@
 {% extends "base.html" %}
 
-{% block title %}About{% endblock %}
+{% block title %}About QalamStudio — AI Writing for Pakistani Creators{% endblock %}
+{% block meta_description %}Learn about QalamStudio: Pakistan's free AI writing studio for natural Urdu content, freelancers, YouTubers, and WhatsApp-first small businesses.{% endblock %}
 
 {% block content %}
 <section style="padding: 3rem 0 2rem">
   <div class="container" style="max-width: 800px">
     <h1 class="section-title">🖊️ About QalamStudio</h1>
     <div class="glass-panel mt-3">
-      <h3 style="color:var(--accent);font-size:1rem;margin-bottom:0.5rem">Our Mission</h3>
-      <p style="color:var(--text-secondary);line-height:1.8">QalamStudio is Pakistan's first dedicated AI writing studio — built for Urdu creators, freelancers, and YouTubers. Every Pakistani deserves world-class AI tools in their own language.</p>
+      <h2 style="color:var(--accent);font-size:1.05rem;margin-bottom:0.5rem">Our mission</h2>
+      <p style="color:var(--text-secondary);line-height:1.8">QalamStudio is Pakistan's dedicated AI writing studio — built for Urdu creators, freelancers, and YouTubers. Every Pakistani deserves world-class writing tools that sound like home, not a textbook translation.</p>
     </div>
     <div class="glass-panel mt-2">
-      <h3 style="color:var(--accent);font-size:1rem;margin-bottom:0.5rem">Why QalamStudio?</h3>
-      <p style="color:var(--text-secondary);line-height:1.8">Most AI tools produce robotic, translated Urdu. QalamStudio writes authentic conversational Pakistani Urdu — the way real Pakistanis actually speak and write.</p>
+      <h2 style="color:var(--accent);font-size:1.05rem;margin-bottom:0.5rem">Why we exist</h2>
+      <p style="color:var(--text-secondary);line-height:1.8">Most global AI tools produce robotic or overly formal Urdu. We optimize for conversational Pakistani Urdu, Roman Urdu, and the English–Urdu mix people already use on WhatsApp, YouTube, and freelancing platforms.</p>
     </div>
     <div class="glass-panel mt-2">
-      <h3 style="color:var(--accent);font-size:1rem;margin-bottom:0.5rem">Contact</h3>
-      <p style="color:var(--text-secondary)">📧 support@qalamstudio.xyz</p>
+      <h2 style="color:var(--accent);font-size:1.05rem;margin-bottom:0.5rem">What you can do</h2>
+      <p style="color:var(--text-secondary);line-height:1.8">
+        <a href="{{ url_for('urdu_writer') }}">Urdu AI Writer</a> ·
+        <a href="{{ url_for('freelancer') }}">Freelancer Toolkit</a> ·
+        <a href="{{ url_for('subtitles') }}">Subtitles</a> ·
+        <a href="{{ url_for('proofread') }}">Proofreader</a> ·
+        <a href="{{ url_for('youtube_seo') }}">YouTube SEO</a> ·
+        <a href="{{ url_for('resume') }}">Resume Builder</a> ·
+        <a href="{{ url_for('whatsapp_replies') }}">WhatsApp Replies</a> ·
+        <a href="{{ url_for('script_timing') }}">Script Timing</a>
+      </p>
+      <p style="color:var(--text-secondary);line-height:1.8;margin-top:0.75rem">Guides and updates live on the <a href="{{ url_for('blog') }}">blog</a>. For Pro access see <a href="{{ url_for('request_pro') }}">Studio Pro</a>.</p>
+    </div>
+    <div class="glass-panel mt-2">
+      <h2 style="color:var(--accent);font-size:1.05rem;margin-bottom:0.5rem">Contact</h2>
+      <p style="color:var(--text-secondary)">📧 support@qalamstudio.xyz · <a href="{{ url_for('contact') }}">Contact page</a></p>
     </div>
   </div>
 </section>
+
+{% set faqs = [
+  {"q": "Is QalamStudio a Pakistani product?", "a": "Yes — designed for creators and businesses in Pakistan, with language defaults that match local usage."},
+  {"q": "Do I need an account?", "a": "No for free daily use. License keys activate Studio Pro on a device when you upgrade."},
+  {"q": "Where can I read tutorials?", "a": "Visit the <a href=\"" ~ url_for('blog') ~ "\">blog</a> for workflows that link each tool."}
+] %}
+{% include "partials/faq.html" %}
 {% endblock %}

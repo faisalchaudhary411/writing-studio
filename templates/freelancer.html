@@ -1,13 +1,20 @@
 {% extends "base.html" %}
 
-{% block title %}Freelancer Toolkit{% endblock %}
+{% block title %}Freelancer Toolkit — Proposals, Invoices & Client Emails{% endblock %}
+{% block meta_description %}Free freelancer toolkit for Fiverr, Upwork and Pakistani clients: AI proposal writer, invoice generator, and professional client emails in English, Roman Urdu, or pure Urdu.{% endblock %}
+
+{% block structured_data %}
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"QalamStudio Freelancer Toolkit","applicationCategory":"BusinessApplication","operatingSystem":"Web","offers":{"@type":"Offer","price":"0","priceCurrency":"PKR"},"description":"Free AI tools for freelancers: proposals, invoices, and client emails."}
+</script>
+{% endblock %}
 
 {% block content %}
 <section style="padding: 3rem 0 2rem">
   <div class="container">
     <div class="section-header">
       <h1 class="section-title">💼 Freelancer Toolkit</h1>
-      <p class="section-subtitle">Proposals, invoices & emails that close deals.</p>
+      <p class="section-subtitle">Proposals, invoices & emails that close deals — for Fiverr, Upwork & local clients.</p>
       {% if is_pro %}
         <span class="stat-pill pro">⭐ Pro — Unlimited</span>
       {% else %}
@@ -180,4 +187,27 @@ document.querySelectorAll("#generate-proposal-btn, #generate-invoice-btn, #gener
   });
 });
 </script>
+
+{% set intro_heading = "Win more freelance work from Pakistan" %}
+{% set paragraphs = [
+  "Whether you sell on <strong>Fiverr</strong>, <strong>Upwork</strong>, or to local businesses, generic proposals get ignored. This toolkit helps you write specific proposals, clean invoices, and client emails in English, Roman Urdu, or pure Urdu.",
+  "After you land the client, pair this with the <a href=\"" ~ url_for('resume') ~ "\">Resume Builder</a> for profile updates and the <a href=\"" ~ url_for('proofread') ~ "\">Urdu Proofreader</a> before you send anything important."
+] %}
+{% include "partials/seo_intro.html" %}
+
+{% set faqs = [
+  {"q": "Can I write proposals in Roman Urdu?", "a": "Yes. Choose Roman Urdu or Pure Urdu on the proposal and email tabs for Pakistani clients who prefer local language."},
+  {"q": "Does the invoice calculator work in PKR?", "a": "You enter quantities and rates; the generator formats a clear invoice you can paste into PDF or chat. Use your own currency amounts."},
+  {"q": "Is this only for designers?", "a": "No — any freelancer (VA, developer, writer, marketer) can use it. For career documents, open the <a href=\"" ~ url_for('resume') ~ "\">Resume / CV Builder</a>."},
+  {"q": "How many free proposals can I generate?", "a": "Free accounts get a daily action limit shared across all tools. <a href=\"" ~ url_for('request_pro') ~ "\">Studio Pro</a> is unlimited."}
+] %}
+{% include "partials/faq.html" %}
+
+{% set related = [
+  {"url": url_for('resume'), "icon": "📄", "title": "Resume Builder", "desc": "Urdu or bilingual CVs for profiles."},
+  {"url": url_for('proofread'), "icon": "📝", "title": "Proofreader", "desc": "Polish proposals before sending."},
+  {"url": url_for('whatsapp_replies'), "icon": "💬", "title": "WhatsApp Replies", "desc": "Client chat templates for local work."},
+  {"url": url_for('urdu_writer'), "icon": "✍️", "title": "Urdu Writer", "desc": "Long-form content for gigs and blogs."}
+] %}
+{% include "partials/related_tools.html" %}
 {% endblock %}

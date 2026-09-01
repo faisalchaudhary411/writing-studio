@@ -1,13 +1,28 @@
 {% extends "base.html" %}
 
-{% block title %}Urdu AI Writer{% endblock %}
+{% block title %}Urdu AI Writer — Free Natural Pakistani Urdu Content Generator{% endblock %}
+{% block meta_description %}Write blogs, YouTube scripts, captions and product copy in natural Pakistani Urdu (or Roman Urdu). Free AI Urdu writer — no signup, built for creators in Pakistan.{% endblock %}
+
+{% block structured_data %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "QalamStudio Urdu AI Writer",
+  "applicationCategory": "WritingApplication",
+  "operatingSystem": "Web",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "PKR" },
+  "description": "Free AI tool that generates natural Pakistani Urdu blogs, scripts and social captions."
+}
+</script>
+{% endblock %}
 
 {% block content %}
 <section style="padding: 3rem 0 2rem">
   <div class="container">
     <div class="section-header">
       <h1 class="section-title">✍️ Urdu AI Writer</h1>
-      <p class="section-subtitle">قدرتی پاکستانی اردو میں مواد — چند سیکنڈ میں۔</p>
+      <p class="section-subtitle">قدرتی پاکستانی اردو میں مواد — چند سیکنڈ میں۔ Free AI writer for blogs, scripts & captions.</p>
       {% if is_pro %}
         <span class="stat-pill pro">⭐ Pro — Unlimited</span>
       {% else %}
@@ -75,11 +90,27 @@
   </div>
 </section>
 
-<script>
-document.getElementById("generate-urdu-btn").addEventListener("click", function() {
-  setTimeout(() => {
-    document.getElementById("download-urdu-btn").style.display = "inline-flex";
-  }, 1000);
-});
-</script>
+{% set intro_heading = "Why creators use this Urdu AI writer" %}
+{% set paragraphs = [
+  "Most English AI tools translate into stiff, bookish Urdu that no one in Lahore or Karachi actually uses. QalamStudio’s <strong>Urdu AI Writer</strong> is tuned for natural Pakistani Urdu — short sentences, everyday words, and the mix of English Pakistanis already type on WhatsApp.",
+  "Generate YouTube scripts with hooks and CTAs, blog posts, Instagram captions, product descriptions, or custom copy in pure Urdu, Roman Urdu, or mixed style. Pair it with the <a href=\"" ~ url_for('proofread') ~ "\">Urdu proofreader</a> to polish drafts, or the <a href=\"" ~ url_for('youtube_seo') ~ "\">YouTube SEO tool</a> for titles and tags.",
+  "Free daily actions, no account required. Upgrade to Studio Pro when you need unlimited generations for client work or a daily content pipeline."
+] %}
+{% include "partials/seo_intro.html" %}
+
+{% set faqs = [
+  {"q": "Is this Urdu writer free?", "a": "Yes. You get free daily actions with no signup. <a href=\"" ~ url_for('request_pro') ~ "\">Studio Pro</a> removes limits and ads."},
+  {"q": "Does it write pure Urdu or only Roman Urdu?", "a": "Both. Choose Pure Urdu (اردو), Roman Urdu, or Mixed (Urdu + English) before generating."},
+  {"q": "Can I use it for YouTube scripts?", "a": "Yes — pick “YouTube Script (with hook & CTA)”. After writing, use <a href=\"" ~ url_for('subtitles') ~ "\">Subtitle Generator</a> and <a href=\"" ~ url_for('script_timing') ~ "\">Script Timing</a> for the same video."},
+  {"q": "How is this different from ChatGPT for Urdu?", "a": "Prompts and defaults are built for Pakistani conversational Urdu instead of formal or Indian-influenced phrasing, so outputs need less rewriting."}
+] %}
+{% include "partials/faq.html" %}
+
+{% set related = [
+  {"url": url_for('proofread'), "icon": "📝", "title": "Urdu Proofreader", "desc": "Fix grammar and spelling on any draft."},
+  {"url": url_for('youtube_seo'), "icon": "🚀", "title": "YouTube SEO", "desc": "Titles, descriptions and tags for your video."},
+  {"url": url_for('subtitles'), "icon": "🎬", "title": "Subtitles", "desc": "Turn the script into timed SRT files."},
+  {"url": url_for('script_timing'), "icon": "⏱️", "title": "Script Timing", "desc": "Estimate read time before you record."}
+] %}
+{% include "partials/related_tools.html" %}
 {% endblock %}

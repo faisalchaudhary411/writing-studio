@@ -1,15 +1,63 @@
 {% extends "base.html" %}
 
 {% block title %}{{ post.title }}{% endblock %}
+{% block meta_description %}{{ post.excerpt or (post.body[:155]|striptags if post.body else post.title) }}{% endblock %}
+{% block og_type %}article{% endblock %}
+
+{% block structured_data %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": {{ post.title|tojson }},
+  "datePublished": {{ (post.date or "")|tojson }},
+  "dateModified": {{ (post.date or "")|tojson }},
+  "author": { "@type": "Organization", "name": "QalamStudio" },
+  "publisher": {
+    "@type": "Organization",
+    "name": "QalamStudio",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "{{ request.url_root.rstrip('/') }}{{ url_for('static', filename='favicons/android-chrome-512x512.png') }}"
+    }
+  },
+  "description": {{ (post.excerpt or (post.body[:200] if post.body else post.title))|striptags|tojson }},
+  "mainEntityOfPage": "{{ request.url_root.rstrip('/') }}/blog/{{ post.id }}"
+}
+</script>
+{% endblock %}
 
 {% block content %}
 <section style="padding: 3rem 0 2rem">
   <div class="container" style="max-width: 800px">
-    <a href="{{ url_for('blog') }}" class="btn btn-ghost btn-sm mb-2">← Back to Blog</a>
-    <span class="blog-category" style="display:inline-block;margin-bottom:1rem;background:rgba(156,107,46,0.1);color:var(--accent);border:1px solid rgba(156,107,46,0.25);padding:0.2rem 0.6rem;border-radius:6px;font-size:0.7rem;font-weight:700;text-transform:uppercase">{{ post.category }}</span>
+    <nav aria-label="Breadcrumb" style="margin-bottom:1rem;font-size:0.85rem;color:var(--text-muted)">
+      <a href="{{ url_for('landing') }}" style="color:var(--accent)">Home</a> ·
+      <a href="{{ url_for('blog') }}" style="color:var(--accent)">Blog</a> ·
+      <span>{{ post.title[:48] }}{% if post.title|length > 48 %}…{% endif %}</span>
+    </nav>
+    <span class="blog-category" style="display:inline-block;margin-bottom:1rem;background:rgba(156,107,46,0.1);color:var(--accent);border:1px solid rgba(156,107,46,0.25);padding:0.2rem 0.6rem;border-radius:6px;font-size:0.7rem;font-weight:700;text-transform:uppercase">{{ post.category or "Guide" }}</span>
     <h1 style="font-family:var(--font-display);font-weight:600;font-size:clamp(1.5rem,4vw,2.5rem);color:var(--text-primary);margin-bottom:0.5rem;line-height:1.2">{{ post.title }}</h1>
     <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:2rem">{{ post.date }}</p>
-    <div class="output-box ltr" style="white-space:pre-wrap;font-size:1rem;line-height:1.9">{{ post.body }}</div>
+    <div class="seo-prose glass-panel" style="white-space:pre-wrap;font-size:1rem;line-height:1.9;color:var(--text-secondary)">{{ post.body }}</div>
+
+    {% if post.related_tools %}
+    <div style="margin-top:2rem">
+      <h2 class="section-title" style="font-size:1.15rem;margin-bottom:0.75rem">Tools mentioned in this guide</h2>
+      <p style="color:var(--text-secondary);line-height:1.8">
+        {% for t in post.related_tools %}
+          <a href="{{ t.url }}">{{ t.label }}</a>{% if not loop.last %} · {% endif %}
+        {% endfor %}
+      </p>
+    </div>
+    {% endif %}
   </div>
 </section>
+
+{% set related = [
+  {"url": url_for('urdu_writer'), "icon": "✍️", "title": "Urdu AI Writer", "desc": "Generate natural Urdu content."},
+  {"url": url_for('subtitles'), "icon": "🎬", "title": "Subtitle Generator", "desc": "Script to SRT in seconds."},
+  {"url": url_for('freelancer'), "icon": "💼", "title": "Freelancer Toolkit", "desc": "Proposals and invoices."},
+  {"url": url_for('blog'), "icon": "📰", "title": "All posts", "desc": "Back to the blog index."}
+] %}
+{% include "partials/related_tools.html" %}
 {% endblock %}

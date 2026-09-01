@@ -1,36 +1,40 @@
 {% extends "base.html" %}
 
-{% block title %}Blog{% endblock %}
+{% block title %}Blog — Urdu AI, YouTube & Freelancer Guides{% endblock %}
+{% block meta_description %}Practical guides from QalamStudio: natural Urdu writing, YouTube subtitles and SEO, freelance proposals, WhatsApp business messages, and resume tips for Pakistan.{% endblock %}
 
 {% block content %}
 <section style="padding: 3rem 0 2rem">
-  <div class="container">
+  <div class="container" style="max-width: 900px">
     <div class="section-header">
-      <h1 class="section-title">Blog</h1>
-      <p class="section-subtitle">Tips, guides, and stories for Pakistani creators.</p>
+      <h1 class="section-title">📰 QalamStudio Blog</h1>
+      <p class="section-subtitle">Workflows for Urdu creators, freelancers, and small businesses — each post links to the right tools.</p>
     </div>
 
     {% if posts %}
-      <div class="blog-grid">
+      <div class="card-grid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">
         {% for post in posts %}
-          {% set colors = {'Guide':'#9C6B2E','Tutorial':'#7C2A2E','News':'#A6752A','Tips':'#3F6B4A','Case Study':'#963232'} %}
-          <a href="{{ url_for('blog_post', slug=post.id) }}" class="blog-card" style="text-decoration:none">
-            <div class="blog-card-body">
-              <span class="blog-category" style="background:{{ colors.get(post.category, '#59492F') }}1a;color:{{ colors.get(post.category, '#59492F') }};border:1px solid {{ colors.get(post.category, '#59492F') }}40">{{ post.category }}</span>
-              <div class="blog-title">{{ post.title }}</div>
-              <div class="blog-excerpt">{{ post.excerpt or post.body[:120] }}...</div>
-              <div class="blog-meta">{{ post.date }}</div>
-            </div>
-          </a>
+        <a href="{{ url_for('blog_post', slug=post.id) }}" class="card" style="text-decoration:none">
+          <div class="card-title">{{ post.title }}</div>
+          <div class="card-desc">{{ post.excerpt or ((post.body or '')[:140] ~ '…') }}</div>
+          <span class="card-link">{{ post.date }} · Read →</span>
+        </a>
         {% endfor %}
       </div>
     {% else %}
-      <div class="glass-panel text-center" style="padding: 4rem 2rem">
-        <div style="font-size: 3rem; margin-bottom: 1rem">📝</div>
+      <div class="glass-panel text-center">
         <h3 style="font-family:var(--font-display);font-weight:600;color:var(--text-primary);margin-bottom:0.5rem">No posts yet</h3>
-        <p style="color:var(--text-secondary)">Check back soon for fresh content!</p>
+        <p style="color:var(--text-secondary)">Check back soon — meanwhile try the <a href="{{ url_for('urdu_writer') }}">Urdu Writer</a> and <a href="{{ url_for('landing') }}#tools">all tools</a>.</p>
       </div>
     {% endif %}
   </div>
 </section>
+
+{% set related = [
+  {"url": url_for('urdu_writer'), "icon": "✍️", "title": "Urdu AI Writer", "desc": "Generate scripts and posts."},
+  {"url": url_for('youtube_seo'), "icon": "🚀", "title": "YouTube SEO", "desc": "Titles and tags that rank."},
+  {"url": url_for('freelancer'), "icon": "💼", "title": "Freelancer Toolkit", "desc": "Proposals that win jobs."},
+  {"url": url_for('whatsapp_replies'), "icon": "💬", "title": "WhatsApp Replies", "desc": "Templates for shop owners."}
+] %}
+{% include "partials/related_tools.html" %}
 {% endblock %}

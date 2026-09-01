@@ -1,6 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}WhatsApp Business Auto-Reply Generator{% endblock %}
+{% block title %}WhatsApp Business Auto-Reply Generator — Free Urdu Templates{% endblock %}
+{% block meta_description %}Free WhatsApp Business auto-reply generator for Pakistani shops and freelancers. Welcome, away, price and order messages in Roman Urdu, pure Urdu or English.{% endblock %}
+
+{% block structured_data %}
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"QalamStudio WhatsApp Business Replies","applicationCategory":"BusinessApplication","operatingSystem":"Web","offers":{"@type":"Offer","price":"0","priceCurrency":"PKR"},"description":"Generate WhatsApp Business auto-replies in Urdu and Roman Urdu for Pakistani small businesses."}
+</script>
+{% endblock %}
 
 {% block content %}
 <section style="padding: 3rem 0 2rem">
@@ -75,4 +82,27 @@
     </div>
   </div>
 </section>
+
+{% set intro_heading = "WhatsApp is the storefront — reply like a pro" %}
+{% set paragraphs = [
+  "Most small businesses in Pakistan close sales on WhatsApp. Generic “we will get back to you” messages lose customers. This tool writes short welcome, away, price, order and complaint replies in the tone your buyers already use.",
+  "Polish any draft with the <a href=\"" ~ url_for('proofread') ~ "\">Urdu Proofreader</a>. For longer product copy, use the <a href=\"" ~ url_for('urdu_writer') ~ "\">Urdu AI Writer</a>."
+] %}
+{% include "partials/seo_intro.html" %}
+
+{% set faqs = [
+  {"q": "Can I get a full set of replies at once?", "a": "Yes — choose “Full set (welcome + away + price + order)” under scenarios."},
+  {"q": "Is Roman Urdu supported?", "a": "Roman Urdu is the default because that is how most shop owners type. Pure Urdu and English are available too."},
+  {"q": "Will this connect to my WhatsApp Business API?", "a": "No. It generates text you copy into WhatsApp Business app quick replies or your own automation tool."},
+  {"q": "What about freelancer client chats?", "a": "Pick Freelancer / Service provider as the business type, or use the <a href=\"" ~ url_for('freelancer') ~ "\">Freelancer Toolkit</a> for formal emails."}
+] %}
+{% include "partials/faq.html" %}
+
+{% set related = [
+  {"url": url_for('urdu_writer'), "icon": "✍️", "title": "Urdu Writer", "desc": "Longer product and promo copy."},
+  {"url": url_for('proofread'), "icon": "📝", "title": "Proofreader", "desc": "Fix typos before saving templates."},
+  {"url": url_for('freelancer'), "icon": "💼", "title": "Freelancer Toolkit", "desc": "Formal proposals and invoices."},
+  {"url": url_for('resume'), "icon": "📄", "title": "Resume Builder", "desc": "Profile text for service sellers."}
+] %}
+{% include "partials/related_tools.html" %}
 {% endblock %}
