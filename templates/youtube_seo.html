@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}YouTube Title, Description & Tags{% endblock %}
+
+{% block content %}
+<section style="padding: 3rem 0 2rem">
+  <div class="container">
+    <div class="section-header">
+      <h1 class="section-title">🎬 YouTube SEO Generator</h1>
+      <p class="section-subtitle">Titles, descriptions & tags that rank — in Urdu or English.</p>
+      {% if is_pro %}
+        <span class="stat-pill pro">⭐ Pro — Unlimited</span>
+      {% else %}
+        <span class="stat-pill">🆓 Free — <span id="actions-left">{{ actions_left }}</span> actions left today</span>
+      {% endif %}
+    </div>
+
+    <div class="glass-panel" style="max-width: 800px; margin: 0 auto;">
+      <div class="form-group">
+        <label class="form-label">Video topic / title idea / short script summary</label>
+        <textarea class="form-textarea" id="yt-topic" rows="5" placeholder="مثال: صبح 5 بجے اٹھنے کے فوائد، یا full script summary..."></textarea>
+      </div>
+
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Language</label>
+          <select class="form-select" id="yt-lang">
+            <option>Pure Urdu (اردو)</option>
+            <option>Roman Urdu</option>
+            <option>English</option>
+            <option>Mixed (Urdu + English)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Niche / Style</label>
+          <select class="form-select" id="yt-niche">
+            <option>General / Educational</option>
+            <option>Vlog / Lifestyle</option>
+            <option>Tech / Reviews</option>
+            <option>Motivation / Self-help</option>
+            <option>Comedy / Entertainment</option>
+            <option>Business / Finance</option>
+            <option>Islamic / Deen</option>
+            <option>Gaming</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Channel name (optional — for description CTA)</label>
+        <input type="text" class="form-input" id="yt-channel" placeholder="e.g. Qalam Studio">
+      </div>
+
+      <button class="btn btn-primary" id="generate-yt-btn" style="width:100%">🚀 Generate Titles, Description & Tags</button>
+
+      <div id="yt-output" class="output-box ltr" style="display:none"></div>
+      <button class="btn btn-secondary" id="download-yt-btn" data-download="#yt-output" data-filename="qalam_youtube_seo.txt" style="width:100%;margin-top:0.75rem;display:none">📥 Download</button>
+    </div>
+  </div>
+</section>
+{% endblock %}

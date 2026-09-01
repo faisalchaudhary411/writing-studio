@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}Urdu / Bilingual Resume Builder{% endblock %}
+
+{% block content %}
+<section style="padding: 3rem 0 2rem">
+  <div class="container">
+    <div class="section-header">
+      <h1 class="section-title">📄 Resume / CV Builder</h1>
+      <p class="section-subtitle">Urdu, English or bilingual CVs for Fiverr, Upwork & local jobs.</p>
+      {% if is_pro %}
+        <span class="stat-pill pro">⭐ Pro — Unlimited</span>
+      {% else %}
+        <span class="stat-pill">🆓 Free — <span id="actions-left">{{ actions_left }}</span> actions left today</span>
+      {% endif %}
+    </div>
+
+    <div class="glass-panel" style="max-width: 900px; margin: 0 auto;">
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Full Name</label>
+          <input type="text" class="form-input" id="cv-name" placeholder="Ali Ahmed">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Target Job / Role</label>
+          <input type="text" class="form-input" id="cv-role" placeholder="e.g. Graphic Designer, Virtual Assistant">
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="text" class="form-input" id="cv-email" placeholder="ali@email.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Phone</label>
+          <input type="text" class="form-input" id="cv-phone" placeholder="+92 300 1234567">
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">City / Country</label>
+          <input type="text" class="form-input" id="cv-location" placeholder="Lahore, Pakistan">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Language of CV</label>
+          <select class="form-select" id="cv-lang">
+            <option>English (Professional)</option>
+            <option>Pure Urdu (اردو)</option>
+            <option>Roman Urdu</option>
+            <option>Bilingual (Urdu + English)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Summary / About you (optional — leave blank to auto-generate)</label>
+        <textarea class="form-textarea" id="cv-summary" rows="2" placeholder="Short intro about yourself..."></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Work Experience</label>
+        <textarea class="form-textarea" id="cv-experience" rows="4" placeholder="Company | Role | Years | Key achievements&#10;e.g. Fiverr | Logo Designer | 2021-Present | 200+ projects, 5-star rating"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Education</label>
+        <textarea class="form-textarea" id="cv-education" rows="2" placeholder="Degree | Institute | Year&#10;e.g. BS Computer Science | Punjab University | 2020"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Skills (comma-separated)</label>
+        <input type="text" class="form-input" id="cv-skills" placeholder="Photoshop, Illustrator, Client Communication, Urdu Typing">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Extra (certifications, languages, links — optional)</label>
+        <textarea class="form-textarea" id="cv-extra" rows="2" placeholder="Google Ads Certificate, Fluent English & Urdu, portfolio: ..."></textarea>
+      </div>
+
+      <button class="btn btn-primary" id="generate-cv-btn" style="width:100%">📄 Generate Resume</button>
+
+      <div id="cv-output" class="output-box ltr" style="display:none"></div>
+      <button class="btn btn-secondary" id="download-cv-btn" data-download="#cv-output" data-filename="qalam_resume.txt" style="width:100%;margin-top:0.75rem;display:none">📥 Download Resume</button>
+    </div>
+  </div>
+</section>
+{% endblock %}

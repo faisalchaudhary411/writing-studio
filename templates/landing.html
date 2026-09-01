@@ -10,20 +10,18 @@
     <svg class="hero-stroke" viewBox="0 0 360 20" aria-hidden="true">
       <path d="M4,14 C60,4 110,18 160,10 C210,2 260,16 356,6" />
     </svg>
-    <p class="hero-subtitle">AI Urdu writer · Freelancer toolkit · Subtitle generator · File converter<br>All free. No signup. No credit card.</p>
+    <p class="hero-subtitle">AI Urdu writer · Freelancer toolkit · Subtitles · Proofreader · YouTube SEO · Resume · WhatsApp replies<br>All free. No signup. No credit card.</p>
     <div class="hero-actions">
       <a href="{{ url_for('urdu_writer') }}" class="btn btn-primary btn-lg">Urdu Writer</a>
       <a href="{{ url_for('freelancer') }}" class="btn btn-secondary btn-lg">Freelancer</a>
       <a href="{{ url_for('subtitles') }}" class="btn btn-secondary btn-lg">Subtitles</a>
-      {% if filedsk_url %}
-      <a href="{{ url_for('filedsk') }}" class="btn btn-secondary btn-lg">FileDesk</a>
-      {% endif %}
+      <a href="{{ url_for('proofread') }}" class="btn btn-secondary btn-lg">Proofread</a>
     </div>
   </div>
 </section>
 
 <!-- Tools Grid -->
-<section style="padding: 2rem 0 4rem">
+<section style="padding: 2rem 0 4rem" id="tools">
   <div class="container">
     <div class="card-grid">
       <a href="{{ url_for('urdu_writer') }}" class="card" style="text-decoration:none">
@@ -43,6 +41,36 @@
         <div class="card-title">Subtitle Generator</div>
         <div class="card-desc">Auto-generate Urdu subtitles & SRT files for YouTube, TikTok, and reels.</div>
         <span class="card-link">Generate SRT →</span>
+      </a>
+      <a href="{{ url_for('proofread') }}" class="card" style="text-decoration:none">
+        <div class="card-icon">📝</div>
+        <div class="card-title">Urdu Proofreader</div>
+        <div class="card-desc">Grammar, spelling & style fixes for pure Urdu, Roman Urdu, or mixed text.</div>
+        <span class="card-link">Proofread →</span>
+      </a>
+      <a href="{{ url_for('youtube_seo') }}" class="card" style="text-decoration:none">
+        <div class="card-icon">🚀</div>
+        <div class="card-title">YouTube SEO</div>
+        <div class="card-desc">Titles, descriptions & tags that help Pakistani creators rank on YouTube.</div>
+        <span class="card-link">Generate SEO →</span>
+      </a>
+      <a href="{{ url_for('resume') }}" class="card" style="text-decoration:none">
+        <div class="card-icon">📄</div>
+        <div class="card-title">Resume / CV Builder</div>
+        <div class="card-desc">Urdu, English or bilingual CVs for freelancers and job applications.</div>
+        <span class="card-link">Build resume →</span>
+      </a>
+      <a href="{{ url_for('whatsapp_replies') }}" class="card" style="text-decoration:none">
+        <div class="card-icon">💬</div>
+        <div class="card-title">WhatsApp Business Replies</div>
+        <div class="card-desc">Welcome, away, price & order auto-replies for shops and service providers.</div>
+        <span class="card-link">Generate replies →</span>
+      </a>
+      <a href="{{ url_for('script_timing') }}" class="card" style="text-decoration:none">
+        <div class="card-icon">⏱️</div>
+        <div class="card-title">Script Timing</div>
+        <div class="card-desc">Estimate voice-over length, section timestamps and pacing tips for video scripts.</div>
+        <span class="card-link">Estimate timing →</span>
       </a>
       {% if filedsk_url %}
       <a href="{{ url_for('filedsk') }}" class="card" style="text-decoration:none" target="_blank">

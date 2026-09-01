@@ -63,6 +63,11 @@
         <a href="{{ url_for('urdu_writer') }}" class="nav-link {% if request.endpoint == 'urdu_writer' %}active{% endif %}">Urdu Writer</a>
         <a href="{{ url_for('freelancer') }}" class="nav-link {% if request.endpoint == 'freelancer' %}active{% endif %}">Freelancer</a>
         <a href="{{ url_for('subtitles') }}" class="nav-link {% if request.endpoint == 'subtitles' %}active{% endif %}">Subtitles</a>
+        <a href="{{ url_for('proofread') }}" class="nav-link {% if request.endpoint == 'proofread' %}active{% endif %}">Proofread</a>
+        <a href="{{ url_for('youtube_seo') }}" class="nav-link {% if request.endpoint == 'youtube_seo' %}active{% endif %}">YouTube SEO</a>
+        <a href="{{ url_for('resume') }}" class="nav-link {% if request.endpoint == 'resume' %}active{% endif %}">Resume</a>
+        <a href="{{ url_for('whatsapp_replies') }}" class="nav-link {% if request.endpoint == 'whatsapp_replies' %}active{% endif %}">WhatsApp</a>
+        <a href="{{ url_for('script_timing') }}" class="nav-link {% if request.endpoint == 'script_timing' %}active{% endif %}">Timing</a>
         {% if filedsk_url %}
         <a href="{{ url_for('filedsk') }}" class="nav-link {% if request.endpoint == 'filedsk' %}active{% endif %}" target="_blank">📁 FileDesk</a>
         {% endif %}
