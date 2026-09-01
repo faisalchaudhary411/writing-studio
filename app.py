@@ -419,9 +419,93 @@ def _get_login_attempts():
     data = _gh_read(_F_LOGIN_ATTEMPTS)
     return data if isinstance(data, dict) else {}
 
+def _seed_blog_posts():
+    """Default ranking content when blogs.json is empty. Admin can replace via dashboard."""
+    return [
+        {
+            "id": "how-to-write-youtube-scripts-in-urdu",
+            "title": "How to Write YouTube Scripts in Natural Pakistani Urdu",
+            "category": "YouTube",
+            "date": "2026-03-01",
+            "published": True,
+            "excerpt": "A simple workflow: draft in the Urdu AI Writer, time the script, add subtitles, then generate SEO titles.",
+            "related_tool_keys": ["urdu_writer", "script_timing", "subtitles", "youtube_seo"],
+            "body": """Pakistani YouTube audiences skip stiff, translated Urdu. Use conversational wording the way people speak in Lahore or Karachi.
+
+Step 1 — Draft the script
+Open the Urdu AI Writer, choose “YouTube Script (with hook & CTA)”, pick Pure Urdu or Roman Urdu, and describe your topic with local examples.
+
+Step 2 — Check length
+Paste the script into Script Timing. Match your target minutes before you record so you do not ramble or cut important points.
+
+Step 3 — Subtitles
+Generate an SRT from the same script with the Subtitle Generator. Captions help retention and accessibility.
+
+Step 4 — Titles and description
+Run YouTube SEO with a short summary of the video to get title options, a description, and tags.
+
+Publish, watch analytics, and rewrite weak hooks with the writer again. Consistency beats one perfect video."""
+        },
+        {
+            "id": "fiverr-upwork-proposals-that-win",
+            "title": "Fiverr and Upwork Proposals That Win (English + Roman Urdu)",
+            "category": "Freelancing",
+            "date": "2026-03-05",
+            "published": True,
+            "excerpt": "Stop sending the same generic pitch. Use the Freelancer Toolkit and proofreader to ship specific proposals fast.",
+            "related_tool_keys": ["freelancer", "proofread", "resume"],
+            "body": """Clients ignore copy-paste proposals. Mention their project name, one risk you will handle, and a clear next step.
+
+1) Open Freelancer Toolkit → Proposal Writer.
+2) Select Fiverr or Upwork, add the client brief, and your real experience only.
+3) Generate in English for global clients or Roman Urdu for local work.
+4) Run the text through the Urdu Proofreader if any Urdu lines feel off.
+5) Keep your Resume / CV updated for profile sections that match the proposal.
+
+Send fewer, better proposals. Track which openings convert and reuse winning structures — not identical paragraphs."""
+        },
+        {
+            "id": "whatsapp-business-auto-replies-pakistan",
+            "title": "WhatsApp Business Auto-Replies for Pakistani Shops",
+            "category": "Small business",
+            "date": "2026-03-10",
+            "published": True,
+            "excerpt": "Welcome, away, price and order messages your customers will actually read — in Roman Urdu.",
+            "related_tool_keys": ["whatsapp_replies", "proofread", "urdu_writer"],
+            "body": """Most sales in Pakistan still close on WhatsApp. Slow or robotic replies lose the customer to the next seller.
+
+Use the WhatsApp Business Replies tool:
+• Pick your business type (shop, clinic, tuition, freelancer…).
+• Choose scenarios: welcome, away, price inquiry, order confirmation, or a full set.
+• Prefer Roman Urdu unless your audience expects pure Urdu script.
+• Fill bracket placeholders like [price] and [delivery area] before saving in WhatsApp Business quick replies.
+
+For product descriptions longer than a chat bubble, draft with the Urdu AI Writer, then shorten. Always proofread before pinning an auto-reply."""
+        },
+        {
+            "id": "urdu-resume-for-local-and-remote-jobs",
+            "title": "Build an Urdu or Bilingual Resume for Local and Remote Jobs",
+            "category": "Careers",
+            "date": "2026-03-15",
+            "published": True,
+            "excerpt": "One page of facts, not fluff — English for Upwork, bilingual for Pakistani employers.",
+            "related_tool_keys": ["resume", "proofread", "freelancer"],
+            "body": """HR and clients scan resumes in seconds. List real roles, tools, and results. Do not invent experience.
+
+1) Open Resume Builder and enter name, target role, experience, education, and skills.
+2) Choose English for international platforms, Pure Urdu or Bilingual for local applications.
+3) Download the text, paste into Google Docs or Word, and apply simple formatting.
+4) Proofread Urdu lines. Keep numbers and employer names accurate.
+
+When you apply to gigs, pair the CV with a tailored proposal from the Freelancer Toolkit."""
+        },
+    ]
+
 def _get_blog_posts():
     data = _gh_read(_F_BLOGS)
-    return data if isinstance(data, list) else []
+    if isinstance(data, list) and len(data) > 0:
+        return data
+    return _seed_blog_posts()
 
 def _save_blog_posts(data):
     return _gh_write(_F_BLOGS, data, "Update blogs")
@@ -1293,6 +1377,25 @@ def blog_post(slug):
     post = next((p for p in posts if p.get("id") == slug), None)
     if not post:
         abort(404)
+    # Resolve related tool keys → internal links for SEO interlinking
+    tool_map = {
+        "urdu_writer": ("Urdu AI Writer", "urdu_writer"),
+        "freelancer": ("Freelancer Toolkit", "freelancer"),
+        "subtitles": ("Subtitle Generator", "subtitles"),
+        "proofread": ("Urdu Proofreader", "proofread"),
+        "youtube_seo": ("YouTube SEO", "youtube_seo"),
+        "resume": ("Resume Builder", "resume"),
+        "whatsapp_replies": ("WhatsApp Replies", "whatsapp_replies"),
+        "script_timing": ("Script Timing", "script_timing"),
+    }
+    related = []
+    for key in post.get("related_tool_keys") or []:
+        meta = tool_map.get(key)
+        if meta:
+            label, endpoint = meta
+            related.append({"label": label, "url": url_for(endpoint)})
+    post = dict(post)
+    post["related_tools"] = related
     return render_template("blog_post.html", post=post)
 
 @app.route("/sitemap.xml")
