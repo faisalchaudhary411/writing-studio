@@ -1471,37 +1471,34 @@ def about():
 # CONTACT INQUIRIES — Resend SMTP primary, Wappfly admin fallback
 # ──────────────────────────────────────────────────────────────────────
 def _send_resend_smtp(to_email, subject, text_body, reply_to=None):
+    """Send via Resend's HTTPS API (not raw SMTP — Render blocks outbound SMTP ports 25/465/587)."""
     if not Config.RESEND_API_KEY:
-        app.logger.error("Resend SMTP skipped: RESEND_API_KEY is not set")
+        app.logger.error("Resend send skipped: RESEND_API_KEY is not set")
         return False
     if not to_email:
-        app.logger.error("Resend SMTP skipped: no recipient email provided")
+        app.logger.error("Resend send skipped: no recipient email provided")
         return False
     try:
-        from email.message import EmailMessage
-        msg = EmailMessage()
-        msg["From"] = Config.CONTACT_FROM_EMAIL
-        msg["To"] = to_email
-        msg["Subject"] = subject
+        payload = {
+            "from": Config.CONTACT_FROM_EMAIL,
+            "to": [to_email],
+            "subject": subject,
+            "text": text_body,
+        }
         if reply_to:
-            msg["Reply-To"] = reply_to
-        msg.set_content(text_body)
-        with smtplib.SMTP_SSL("smtp.resend.com", 465, context=ssl.create_default_context(), timeout=20) as server:
-            server.login("resend", Config.RESEND_API_KEY)
-            server.send_message(msg)
-        app.logger.info("Resend SMTP: sent to %s from %s", to_email, Config.CONTACT_FROM_EMAIL)
-        return True
-    except smtplib.SMTPAuthenticationError as exc:
-        app.logger.error("Resend SMTP AUTH FAILED (bad RESEND_API_KEY?): %s", exc)
-        return False
-    except smtplib.SMTPSenderRefused as exc:
-        app.logger.error("Resend SMTP SENDER REFUSED (CONTACT_FROM_EMAIL=%r not verified?): %s", Config.CONTACT_FROM_EMAIL, exc)
-        return False
-    except smtplib.SMTPRecipientsRefused as exc:
-        app.logger.error("Resend SMTP RECIPIENT REFUSED (to=%r): %s", to_email, exc)
+            payload["reply_to"] = reply_to
+        r = req.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {Config.RESEND_API_KEY}", "Content-Type": "application/json"},
+            json=payload, timeout=20,
+        )
+        if r.status_code in (200, 201):
+            app.logger.info("Resend API: sent to %s from %s", to_email, Config.CONTACT_FROM_EMAIL)
+            return True
+        app.logger.error("Resend API failed (%s): from=%r to=%r body=%s", r.status_code, Config.CONTACT_FROM_EMAIL, to_email, r.text[:500])
         return False
     except Exception as exc:
-        app.logger.error("Resend SMTP failed (from=%r to=%r): %s", Config.CONTACT_FROM_EMAIL, to_email, exc, exc_info=True)
+        app.logger.error("Resend API request failed (from=%r to=%r): %s", Config.CONTACT_FROM_EMAIL, to_email, exc, exc_info=True)
         return False
 
 def _contact_auto_reply(category, name):
