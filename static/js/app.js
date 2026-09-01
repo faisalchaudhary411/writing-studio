@@ -221,7 +221,7 @@
       if (!(await hasActionsLeft())) return;
       btn.disabled = true;
       btn.innerHTML = `<span class="loading-dots"><span></span><span></span><span></span></span>`;
-      await showInterstitialAd();
+      if (shouldShowAd()) await showInterstitialAd();
       try {
         const res = await api("/api/generate-urdu", {
           content_type: document.getElementById("urdu-type").value,
@@ -255,7 +255,7 @@
         if (!(await hasActionsLeft())) return;
         propBtn.disabled = true;
         propBtn.innerHTML = `<span class="loading-dots"><span></span><span></span><span></span></span>`;
-        await showInterstitialAd();
+        if (shouldShowAd()) await showInterstitialAd();
         try {
           const res = await api("/api/generate-proposal", {
             platform: document.getElementById("prop-platform").value,
@@ -338,7 +338,7 @@
         if (!(await hasActionsLeft())) return;
         emailBtn.disabled = true;
         emailBtn.innerHTML = `<span class="loading-dots"><span></span><span></span><span></span></span>`;
-        await showInterstitialAd();
+        if (shouldShowAd()) await showInterstitialAd();
         try {
           const res = await api("/api/generate-email", {
             etype: document.getElementById("email-type").value,
@@ -371,7 +371,7 @@
         if (!(await hasActionsLeft())) return;
         srtBtn.disabled = true;
         srtBtn.innerHTML = `<span class="loading-dots"><span></span><span></span><span></span></span>`;
-        await showInterstitialAd();
+        if (shouldShowAd()) await showInterstitialAd();
         try {
           const res = await api("/api/generate-srt", {
             script,
@@ -399,7 +399,7 @@
         if (!(await hasActionsLeft())) return;
         transBtn.disabled = true;
         transBtn.innerHTML = `<span class="loading-dots"><span></span><span></span><span></span></span>`;
-        await showInterstitialAd();
+        if (shouldShowAd()) await showInterstitialAd();
         try {
           const res = await api("/api/translate-srt", {
             eng_srt: srt,
@@ -508,6 +508,16 @@
       });
     });
 
+    // Unlock a locked-out login-attempt IP
+    document.querySelectorAll("[data-unlock-ip]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const ip_hash = btn.dataset.unlockIp;
+        await api("/admin/api/unlock-login", { ip_hash }, "POST");
+        Toast.show("Unlocked", "success");
+        location.reload();
+      });
+    });
+
     // Approve / Reject requests
     document.querySelectorAll("[data-req-action]").forEach(btn => {
       btn.addEventListener("click", async () => {
@@ -611,6 +621,33 @@
         }
       });
     }
+  }
+
+  // ── Ad Frequency Capping ──
+  // UX/POLICY FIX: every single generation action showed a full 5-second
+  // interstitial with zero capping — a brand-new user's very first click
+  // on ANY tool hit an ad before they'd seen the product produce anything,
+  // and a heavy user got hit on every action with no let-up. Ad networks
+  // also treat this as a "make good" risk: forcing an impression on every
+  // single interaction, regardless of a real gap, is the kind of pattern
+  // that gets sites flagged in Adsterra/AdSense review. Now: no ad for a
+  // session's first 2 free actions (let them see it work first), then at
+  // most one ad every 3rd action — with a hard minimum 90-second gap even
+  // if the count would trigger one back-to-back (someone spamming the
+  // generate button shouldn't get an ad every few seconds).
+  const AD_EVERY_N_ACTIONS = 3;
+  const AD_MIN_GAP_MS = 90 * 1000;
+
+  function shouldShowAd() {
+    if (window.IS_PRO) return false;
+    const count = parseInt(sessionStorage.getItem("qs_action_count") || "0", 10) + 1;
+    sessionStorage.setItem("qs_action_count", String(count));
+    if (count <= 2) return false;
+    if (count % AD_EVERY_N_ACTIONS !== 0) return false;
+    const lastAd = parseInt(sessionStorage.getItem("qs_last_ad_ts") || "0", 10);
+    if (Date.now() - lastAd < AD_MIN_GAP_MS) return false;
+    sessionStorage.setItem("qs_last_ad_ts", String(Date.now()));
+    return true;
   }
 
   // ── Interstitial Ad ──
