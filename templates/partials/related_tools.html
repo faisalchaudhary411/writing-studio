@@ -1,0 +1,18 @@
+{# Expects: related = list of {url, icon, title, desc} #}
+{% if related %}
+<section class="seo-section related-tools" aria-labelledby="related-heading">
+  <div class="container" style="max-width: 900px">
+    <h2 id="related-heading" class="section-title" style="font-size:1.25rem;margin-bottom:1rem">Related tools</h2>
+    <div class="card-grid related-grid">
+      {% for t in related %}
+      <a href="{{ t.url }}" class="card related-card" style="text-decoration:none">
+        <div class="card-icon">{{ t.icon }}</div>
+        <div class="card-title">{{ t.title }}</div>
+        <div class="card-desc">{{ t.desc }}</div>
+        <span class="card-link">Open tool →</span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}

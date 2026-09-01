@@ -1,1 +1,34 @@
-[]
+{# Expects: faqs = list of {q, a} dicts #}
+{% if faqs %}
+<section class="seo-section" aria-labelledby="faq-heading">
+  <div class="container" style="max-width: 800px">
+    <h2 id="faq-heading" class="section-title" style="font-size:1.35rem;margin-bottom:1rem">Frequently asked questions</h2>
+    <div class="faq-list">
+      {% for item in faqs %}
+      <details class="faq-item">
+        <summary class="faq-q">{{ item.q }}</summary>
+        <div class="faq-a">{{ item.a|safe }}</div>
+      </details>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {% for item in faqs %}
+    {
+      "@type": "Question",
+      "name": {{ item.q|tojson }},
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": {{ item.a|striptags|tojson }}
+      }
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ]
+}
+</script>
+{% endif %}

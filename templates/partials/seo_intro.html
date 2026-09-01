@@ -1,0 +1,13 @@
+{# Expects: paragraphs = list of HTML/text strings; optional heading #}
+{% if paragraphs %}
+<section class="seo-section seo-intro" aria-label="About this tool">
+  <div class="container" style="max-width: 800px">
+    {% if heading %}<h2 class="section-title" style="font-size:1.25rem;margin-bottom:0.75rem">{{ heading }}</h2>{% endif %}
+    <div class="seo-prose glass-panel">
+      {% for p in paragraphs %}
+      <p>{{ p|safe }}</p>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
