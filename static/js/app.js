@@ -417,6 +417,181 @@
     }
   }
 
+  // ── Urdu Proofreader ──
+  function initProofread() {
+    const btn = document.getElementById("proofread-btn");
+    if (!btn) return;
+    btn.addEventListener("click", async () => {
+      const text = document.getElementById("proof-text").value.trim();
+      if (!text) return Toast.show("Paste some text to proofread", "error");
+      const lang = document.getElementById("proof-lang").value;
+      if (!(await hasActionsLeft())) return;
+      btn.disabled = true;
+      btn.innerHTML = `<span class="loading-dots"><span></span><span></span><span></span></span>`;
+      if (shouldShowAd()) await showInterstitialAd();
+      try {
+        const res = await api("/api/proofread", {
+          text,
+          lang,
+          focus: document.getElementById("proof-focus").value
+        });
+        const out = document.getElementById("proof-output");
+        out.textContent = res.result;
+        out.className = "output-box " + (lang === "Roman Urdu" ? "ltr" : "urdu");
+        out.style.display = "block";
+        const dl = document.getElementById("download-proof-btn");
+        if (dl) dl.style.display = "inline-flex";
+        if (res.warning) Toast.show(res.warning, "error", 7000);
+        updateActionsLeft();
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "🔍 Proofread Text";
+      }
+    });
+  }
+
+  // ── YouTube SEO ──
+  function initYoutubeSeo() {
+    const btn = document.getElementById("generate-yt-btn");
+    if (!btn) return;
+    btn.addEventListener("click", async () => {
+      const topic = document.getElementById("yt-topic").value.trim();
+      if (!topic) return Toast.show("Enter a video topic or summary", "error");
+      const lang = document.getElementById("yt-lang").value;
+      if (!(await hasActionsLeft())) return;
+      btn.disabled = true;
+      btn.innerHTML = `<span class="loading-dots"><span></span><span></span><span></span></span>`;
+      if (shouldShowAd()) await showInterstitialAd();
+      try {
+        const res = await api("/api/generate-youtube-seo", {
+          topic,
+          lang,
+          niche: document.getElementById("yt-niche").value,
+          channel: document.getElementById("yt-channel").value.trim()
+        });
+        const out = document.getElementById("yt-output");
+        out.textContent = res.result;
+        out.className = "output-box " + (lang === "Pure Urdu (اردو)" ? "urdu" : "ltr");
+        out.style.display = "block";
+        const dl = document.getElementById("download-yt-btn");
+        if (dl) dl.style.display = "inline-flex";
+        if (res.warning) Toast.show(res.warning, "error", 7000);
+        updateActionsLeft();
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "🚀 Generate Titles, Description & Tags";
+      }
+    });
+  }
+
+  // ── Resume / CV Builder ──
+  function initResume() {
+    const btn = document.getElementById("generate-cv-btn");
+    if (!btn) return;
+    btn.addEventListener("click", async () => {
+      const name = document.getElementById("cv-name").value.trim();
+      const role = document.getElementById("cv-role").value.trim();
+      if (!name || !role) return Toast.show("Name and target role are required", "error");
+      const lang = document.getElementById("cv-lang").value;
+      if (!(await hasActionsLeft())) return;
+      btn.disabled = true;
+      btn.innerHTML = `<span class="loading-dots"><span></span><span></span><span></span></span>`;
+      if (shouldShowAd()) await showInterstitialAd();
+      try {
+        const res = await api("/api/generate-resume", {
+          name,
+          role,
+          email: document.getElementById("cv-email").value.trim(),
+          phone: document.getElementById("cv-phone").value.trim(),
+          location: document.getElementById("cv-location").value.trim(),
+          lang,
+          summary: document.getElementById("cv-summary").value.trim(),
+          experience: document.getElementById("cv-experience").value.trim(),
+          education: document.getElementById("cv-education").value.trim(),
+          skills: document.getElementById("cv-skills").value.trim(),
+          extra: document.getElementById("cv-extra").value.trim()
+        });
+        const out = document.getElementById("cv-output");
+        out.textContent = res.result;
+        out.className = "output-box " + (lang === "Pure Urdu (اردو)" ? "urdu" : "ltr");
+        out.style.display = "block";
+        const dl = document.getElementById("download-cv-btn");
+        if (dl) dl.style.display = "inline-flex";
+        if (res.warning) Toast.show(res.warning, "error", 7000);
+        updateActionsLeft();
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "📄 Generate Resume";
+      }
+    });
+  }
+
+  // ── WhatsApp Business Replies ──
+  function initWhatsappReplies() {
+    const btn = document.getElementById("generate-wa-btn");
+    if (!btn) return;
+    btn.addEventListener("click", async () => {
+      const lang = document.getElementById("wa-lang").value;
+      if (!(await hasActionsLeft())) return;
+      btn.disabled = true;
+      btn.innerHTML = `<span class="loading-dots"><span></span><span></span><span></span></span>`;
+      if (shouldShowAd()) await showInterstitialAd();
+      try {
+        const res = await api("/api/generate-whatsapp-replies", {
+          biz: document.getElementById("wa-biz").value,
+          lang,
+          name: document.getElementById("wa-name").value.trim(),
+          scenario: document.getElementById("wa-scenario").value,
+          details: document.getElementById("wa-details").value.trim()
+        });
+        const out = document.getElementById("wa-output");
+        out.textContent = res.result;
+        out.className = "output-box " + (lang === "Pure Urdu (اردو)" ? "urdu" : "ltr");
+        out.style.display = "block";
+        const dl = document.getElementById("download-wa-btn");
+        if (dl) dl.style.display = "inline-flex";
+        if (res.warning) Toast.show(res.warning, "error", 7000);
+        updateActionsLeft();
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "💬 Generate WhatsApp Replies";
+      }
+    });
+  }
+
+  // ── Script Timing Estimator ──
+  function initScriptTiming() {
+    const btn = document.getElementById("estimate-timing-btn");
+    if (!btn) return;
+    btn.addEventListener("click", async () => {
+      const script = document.getElementById("timing-script").value.trim();
+      if (!script) return Toast.show("Paste your script", "error");
+      if (!(await hasActionsLeft())) return;
+      btn.disabled = true;
+      btn.innerHTML = `<span class="loading-dots"><span></span><span></span><span></span></span>`;
+      if (shouldShowAd()) await showInterstitialAd();
+      try {
+        const res = await api("/api/estimate-script-timing", {
+          script,
+          lang: document.getElementById("timing-lang").value,
+          pace: document.getElementById("timing-pace").value,
+          target: document.getElementById("timing-target").value
+        });
+        const out = document.getElementById("timing-output");
+        out.textContent = res.result;
+        out.className = "output-box ltr";
+        out.style.display = "block";
+        const dl = document.getElementById("download-timing-btn");
+        if (dl) dl.style.display = "inline-flex";
+        if (res.warning) Toast.show(res.warning, "error", 7000);
+        updateActionsLeft();
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "⏱️ Estimate Timing & Pacing";
+      }
+    });
+  }
+
   // ── Update Actions Left ──
   function updateActionsLeft() {
     const el = document.getElementById("actions-left");
@@ -714,6 +889,11 @@
     initUrduWriter();
     initFreelancer();
     initSubtitles();
+    initProofread();
+    initYoutubeSeo();
+    initResume();
+    initWhatsappReplies();
+    initScriptTiming();
     initDownloads();
     initStepper();
     initAdmin();
