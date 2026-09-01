@@ -1,35 +1,85 @@
 {% extends "base.html" %}
 
-{% block title %}Contact QalamStudio — Support & Feedback{% endblock %}
-{% block meta_description %}Contact QalamStudio support for billing, Pro licenses, feature requests, or partnership. Email support@qalamstudio.xyz.{% endblock %}
+{% block title %}Contact QalamStudio — Support, Feedback & Partnerships{% endblock %}
+{% block meta_description %}Contact QalamStudio for support, Studio Pro billing, feature requests, feedback, and partnerships.{% endblock %}
 
 {% block content %}
-<section style="padding: 3rem 0 2rem">
-  <div class="container" style="max-width: 700px">
-    <h1 class="section-title">📬 Contact</h1>
-    <p class="section-subtitle" style="margin-bottom:1.5rem">Questions about tools, Studio Pro, or partnerships — we read every message.</p>
-    <div class="glass-panel">
-      <p style="color:var(--text-secondary);line-height:1.8;margin-bottom:1rem">
-        <strong>Email:</strong> <a href="mailto:support@qalamstudio.xyz">support@qalamstudio.xyz</a>
-      </p>
-      <p style="color:var(--text-secondary);line-height:1.8;margin-bottom:1rem">
-        For Pro requests use the <a href="{{ url_for('request_pro') }}">Request Pro</a> page so payment details stay organized.
-      </p>
-      <p style="color:var(--text-secondary);line-height:1.8">
-        Explore tools: <a href="{{ url_for('urdu_writer') }}">Urdu Writer</a>,
-        <a href="{{ url_for('freelancer') }}">Freelancer</a>,
-        <a href="{{ url_for('subtitles') }}">Subtitles</a>,
-        <a href="{{ url_for('blog') }}">Blog</a>,
-        <a href="{{ url_for('about') }}">About</a>.
-      </p>
+<section class="contact-hero">
+  <div class="container contact-shell">
+    <div class="contact-intro">
+      <span class="eyebrow">QALAMSTUDIO SUPPORT</span>
+      <h1>Let’s talk.</h1>
+      <p>Need help with a tool, have an idea, or want to work together? Send us a message and choose the topic so we can route it faster.</p>
+
+      <div class="contact-info-card">
+        <div class="contact-info-icon">✉</div>
+        <div>
+          <strong>Email support</strong>
+          <a href="mailto:support@qalamstudio.xyz">support@qalamstudio.xyz</a>
+          <small>For payment screenshots, use the Studio Pro request page when possible.</small>
+        </div>
+      </div>
+
+      <div class="contact-notes">
+        <div><span>⚡</span><p><strong>Automated acknowledgement</strong><br>Common support, billing, feature, and partnership inquiries receive a confirmation automatically.</p></div>
+        <div><span>↩</span><p><strong>Human follow-up</strong><br>We review messages and aim to reply within 1–2 business days.</p></div>
+      </div>
     </div>
+
+    <form class="contact-form glass-panel" method="POST" action="{{ url_for('contact') }}">
+      <div class="contact-form-head">
+        <span class="contact-form-mark">✦</span>
+        <div><h2>Send a message</h2><p>Tell us what you need.</p></div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="name">Your name</label>
+          <input id="name" name="name" type="text" maxlength="100" required autocomplete="name" placeholder="Your name">
+        </div>
+        <div class="form-group">
+          <label for="email">Email address</label>
+          <input id="email" name="email" type="email" maxlength="254" required autocomplete="email" placeholder="you@example.com">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="category">What is this about?</label>
+          <select id="category" name="category">
+            <option value="general">General question</option>
+            <option value="support">Tool support</option>
+            <option value="billing">Studio Pro / billing</option>
+            <option value="feature">Feature request</option>
+            <option value="partnership">Partnership</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="phone">Phone <span>(optional)</span></label>
+          <input id="phone" name="phone" type="tel" maxlength="50" autocomplete="tel" placeholder="Optional">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="message">Your message</label>
+        <textarea id="message" name="message" rows="7" minlength="10" maxlength="5000" required placeholder="Tell us how we can help..."></textarea>
+      </div>
+
+      <div class="contact-hp" aria-hidden="true">
+        <label for="website">Website</label>
+        <input id="website" name="website" type="text" tabindex="-1" autocomplete="off">
+      </div>
+
+      <button type="submit" class="btn btn-primary contact-submit">Send message <span>→</span></button>
+      <p class="contact-privacy">By sending this form, you agree that we can use your details to respond to your inquiry.</p>
+    </form>
   </div>
 </section>
 
 {% set faqs = [
-  {"q": "How fast do you reply?", "a": "We aim to answer support email within 1–2 business days."},
-  {"q": "Where do I send payment screenshots?", "a": "Upload them on the <a href=\"" ~ url_for('request_pro') ~ "\">Request Pro</a> form rather than email when possible."},
-  {"q": "Privacy of my content?", "a": "See our <a href=\"" ~ url_for('privacy') ~ "\">Privacy Policy</a>. Generation requests are processed to return results; we do not sell your drafts."}
+  {"q": "How fast do you reply?", "a": "We aim to answer support and general inquiries within 1–2 business days."},
+  {"q": "Can I ask for a new tool or feature?", "a": "Yes. Choose Feature request in the form and describe the problem you want the tool to solve."},
+  {"q": "Where do I send Studio Pro payment details?", "a": "Use the <a href=\"" ~ url_for('request_pro') ~ "\">Request Pro</a> page so payment details stay organized."}
 ] %}
 {% include "partials/faq.html" %}
 {% endblock %}
