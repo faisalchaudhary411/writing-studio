@@ -993,3 +993,83 @@ body {
 
 /* ── FileDesk External Badge ── */
 .external-badge::after { content: "↗"; font-size: 0.65em; margin-left: 0.3rem; opacity: 0.6; }
+
+/* ── SEO content sections ── */
+.seo-section { padding: 2.5rem 0 1rem; }
+.seo-prose p {
+  color: var(--text-secondary);
+  line-height: 1.85;
+  margin-bottom: 0.9rem;
+  font-size: 0.95rem;
+}
+.seo-prose p:last-child { margin-bottom: 0; }
+.seo-prose a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+
+/* ── FAQ accordion ── */
+.faq-list { display: flex; flex-direction: column; gap: 0.65rem; }
+.faq-item {
+  background: var(--glass-bg, rgba(255,255,255,0.04));
+  border: 1px solid var(--border-subtle, rgba(241,231,210,0.12));
+  border-radius: var(--radius-md, 12px);
+  padding: 0;
+  overflow: hidden;
+}
+.faq-q {
+  cursor: pointer;
+  list-style: none;
+  padding: 1rem 1.15rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.faq-q::-webkit-details-marker { display: none; }
+.faq-q::after {
+  content: "+";
+  font-size: 1.2rem;
+  color: var(--accent);
+  flex-shrink: 0;
+  line-height: 1;
+}
+.faq-item[open] .faq-q::after { content: "−"; }
+.faq-a {
+  padding: 0 1.15rem 1.1rem;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.75;
+}
+.faq-a a { color: var(--accent); }
+
+/* ── Related tools grid ── */
+.related-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.related-card .card-desc { font-size: 0.82rem; }
+
+/* ── Footer grid ── */
+.footer-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2rem;
+  margin-bottom: 1.75rem;
+  text-align: left;
+}
+.footer-col { display: flex; flex-direction: column; gap: 0.35rem; align-items: flex-start; }
+.footer-heading {
+  font-weight: 700;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 0.35rem;
+}
+.footer-blurb {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.55;
+  max-width: 280px;
+}
+@media (max-width: 768px) {
+  .footer-grid { grid-template-columns: 1fr; gap: 1.5rem; }
+}
