@@ -22,9 +22,12 @@
       <form method="POST" action="{{ url_for('admin_login') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="form-group">
-          <input type="password" class="form-input" name="password" placeholder="Enter admin password" autofocus>
+          <input type="email" class="form-input" name="email" placeholder="Admin email" autofocus {{ 'disabled' if locked }} style="margin-bottom:0.75rem">
+          <input type="password" class="form-input" name="password" placeholder="Enter admin password" {{ 'disabled' if locked }}>
         </div>
-        <button type="submit" class="btn btn-primary" style="width:100%">Login</button>
+        <button type="submit" class="btn btn-primary" style="width:100%" {{ 'disabled' if locked }}>
+          {{ 'Locked — try again later' if locked else 'Login' }}
+        </button>
       </form>
       <a href="{{ url_for('landing') }}" class="btn btn-ghost" style="width:100%;margin-top:0.75rem">← Back to Home</a>
     </div>

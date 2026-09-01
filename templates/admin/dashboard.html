@@ -15,6 +15,25 @@
       </div>
     </div>
 
+    <!-- Security: recent admin login attempts -->
+    {% if login_attempts %}
+    <div class="glass-panel mt-3">
+      <h3 style="font-family:var(--font-display);font-weight:600;color:var(--text-primary);margin-bottom:1rem;font-size:1rem">Recent login activity</h3>
+      {% for a in login_attempts %}
+        <div class="key-row {{ 'revoked' if a.locked_until and a.locked_until > now.timestamp() else '' }}">
+          <code style="font-size:0.75rem">{{ a.ip_hash }}</code>
+          <span style="font-size:0.78rem;color:var(--text-secondary)">{{ a.count }} failed attempt(s)</span>
+          {% if a.locked_until and a.locked_until > now.timestamp() %}
+            <span class="status-badge status-rejected">Locked</span>
+            <button class="btn btn-sm" data-unlock-ip="{{ a.ip_hash }}">Unlock</button>
+          {% else %}
+            <span class="status-badge status-approved">Clear</span>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
     <!-- KPIs -->
     <div class="kpi-grid">
       <div class="kpi-card">
