@@ -54,6 +54,19 @@
       </div>
     </div>
 
+    <!-- AI Provider Status -->
+    <div class="glass-panel mt-3">
+      <h3 style="font-family:var(--font-display);font-weight:600;color:var(--text-primary);font-size:1rem;margin-bottom:1rem">AI Providers (fallback order)</h3>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+        <span class="status-badge {{ 'status-approved' if groq_set else 'status-rejected' }}">1. Groq {{ '✓' if groq_set else '✗' }}</span>
+        <span class="status-badge {{ 'status-approved' if cerebras_set else 'status-rejected' }}">2. Cerebras {{ '✓' if cerebras_set else '✗' }}</span>
+        <span class="status-badge {{ 'status-approved' if openrouter_set else 'status-rejected' }}">3. OpenRouter {{ '✓' if openrouter_set else '✗' }}</span>
+      </div>
+      {% if not (cerebras_set and openrouter_set) %}
+        <p style="font-size:0.75rem;color:var(--text-muted);margin-top:0.6rem">Only Groq is required to run — Cerebras/OpenRouter are optional fallbacks if Groq has an outage or deprecates a model again.</p>
+      {% endif %}
+    </div>
+
     <!-- GitHub Status -->
     <div class="glass-panel mt-3">
       <h3 style="font-family:var(--font-display);font-weight:600;color:var(--text-primary);font-size:1rem;margin-bottom:1rem">🔗 GitHub Sync</h3>
