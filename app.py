@@ -2,7 +2,7 @@
 # QALAM STUDIO — Flask Edition
 # v4.0 — Unique glassmorphism design · Full feature parity
 # ══════════════════════════════════════════════════════════════════════
-import os, json, base64, time, hashlib, hmac, secrets, random, string, re, datetime, threading
+import os, json, base64, time, hashlib, hmac, secrets, random, string, re, datetime, threading, smtplib, ssl, html
 from functools import wraps
 from dotenv import load_dotenv
 from flask import (
@@ -75,6 +75,7 @@ class Config:
     WHATSAPP_ADMIN_NUMBER = os.environ.get("WHATSAPP_ADMIN_NUMBER", "")
     WAPPFLY_API_KEY = os.environ.get("WAPPFLY_API_KEY", "")
     WAPPFLY_ADMIN_NUMBER = os.environ.get("WAPPFLY_ADMIN_NUMBER", "")
+    CONTACT_FROM_EMAIL = os.environ.get("CONTACT_FROM_EMAIL", "QalamStudio <onboarding@resend.dev>")
     FREE_DAILY_ACTIONS = int(os.environ.get("FREE_DAILY_ACTIONS", "20"))
     # Auto-approve manual Pakistani payments instantly (trust-based with grace period)
     AUTO_APPROVE_MANUAL = os.environ.get("AUTO_APPROVE_MANUAL", "true").lower() == "true"
@@ -1466,8 +1467,97 @@ Sitemap: {base}/sitemap.xml
 def about():
     return render_template("about.html")
 
-@app.route("/contact")
+# ──────────────────────────────────────────────────────────────────────
+# CONTACT INQUIRIES — Resend SMTP primary, Wappfly admin fallback
+# ──────────────────────────────────────────────────────────────────────
+def _send_resend_smtp(to_email, subject, text_body, reply_to=None):
+    if not Config.RESEND_API_KEY or not to_email:
+        return False
+    try:
+        from email.message import EmailMessage
+        msg = EmailMessage()
+        msg["From"] = Config.CONTACT_FROM_EMAIL
+        msg["To"] = to_email
+        msg["Subject"] = subject
+        if reply_to:
+            msg["Reply-To"] = reply_to
+        msg.set_content(text_body)
+        with smtplib.SMTP_SSL("smtp.resend.com", 465, context=ssl.create_default_context(), timeout=20) as server:
+            server.login("resend", Config.RESEND_API_KEY)
+            server.send_message(msg)
+        return True
+    except Exception as exc:
+        app.logger.warning("Resend SMTP failed: %s", exc)
+        return False
+
+def _contact_auto_reply(category, name):
+    replies = {
+        "support": ("We received your support request", f"Hi {name},\n\nThanks for contacting QalamStudio. Your support request is in our queue. We usually reply within 1–2 business days. If you can include screenshots or the exact error message in a follow-up, it helps us resolve the issue faster.\n\n— QalamStudio Support"),
+        "billing": ("We received your billing inquiry", f"Hi {name},\n\nThanks for contacting QalamStudio. We received your billing or Studio Pro inquiry and will review it shortly. For payment proof or a Pro request, you can also use the Request Pro page so everything stays organized.\n\n— QalamStudio"),
+        "feature": ("Thanks for your QalamStudio idea", f"Hi {name},\n\nThanks for the feature suggestion. We read product ideas and use them to prioritize future improvements. We cannot promise every feature will be added, but your feedback has been received.\n\n— QalamStudio"),
+        "partnership": ("We received your partnership inquiry", f"Hi {name},\n\nThanks for reaching out about a partnership or collaboration. We received your message and will review the details before responding.\n\n— QalamStudio"),
+    }
+    return replies.get(category, ("We received your message", f"Hi {name},\n\nThanks for contacting QalamStudio. We received your message and will get back to you as soon as possible.\n\n— QalamStudio"))
+
+def _notify_contact_inquiry(name, email, category, message, phone=""):
+    safe_name = html.escape(name)
+    safe_email = html.escape(email)
+    safe_phone = html.escape(phone or "Not provided")
+    safe_category = html.escape(category.title())
+    safe_message = html.escape(message)
+    admin_text = f"""New QalamStudio Contact Inquiry\n\nName: {name}\nEmail: {email}\nPhone: {phone or 'Not provided'}\nCategory: {category.title()}\n\nMessage:\n{message}\n"""
+    notified = False
+    # Primary: Resend SMTP. Reply-To lets you answer the visitor directly.
+    if Config.ADMIN_EMAIL:
+        notified = _send_resend_smtp(
+            Config.ADMIN_EMAIL, f"New {category.title()} inquiry — {name}", admin_text, reply_to=email
+        )
+    # Fallback: Wappfly WhatsApp notification to the admin.
+    if not notified and Config.WAPPFLY_API_KEY and Config.WAPPFLY_ADMIN_NUMBER:
+        try:
+            r = req.post(
+                "https://api.wappfly.com/v1/messages",
+                headers={"Authorization": f"Bearer {Config.WAPPFLY_API_KEY}", "Content-Type": "application/json"},
+                json={"to": Config.WAPPFLY_ADMIN_NUMBER, "type": "text", "text": {"body": admin_text}},
+                timeout=15,
+            )
+            notified = r.status_code in (200, 201)
+            if not notified:
+                app.logger.warning("Wappfly contact fallback failed: %s", r.status_code)
+        except Exception as exc:
+            app.logger.warning("Wappfly contact fallback error: %s", exc)
+    return notified
+
+@app.route("/contact", methods=["GET", "POST"])
 def contact():
+    if request.method == "POST":
+        # Honeypot: bots often fill fields hidden from real visitors.
+        if request.form.get("website", "").strip():
+            return redirect(url_for("contact"))
+
+        name = request.form.get("name", "").strip()[:100]
+        email = request.form.get("email", "").strip()[:254]
+        phone = request.form.get("phone", "").strip()[:50]
+        category = request.form.get("category", "general").strip().lower()
+        message = request.form.get("message", "").strip()[:5000]
+        allowed_categories = {"general", "support", "billing", "feature", "partnership"}
+
+        if category not in allowed_categories:
+            category = "general"
+        if not name or not email or "@" not in email or "." not in email.rsplit("@", 1)[-1]:
+            flash("Please enter your name and a valid email address.", "error")
+            return render_template("contact.html")
+        if len(message) < 10:
+            flash("Please write a little more detail so we can help you.", "error")
+            return render_template("contact.html")
+
+        _notify_contact_inquiry(name, email, category, message, phone)
+        # Automated acknowledgement for common inquiry types.
+        subject, reply = _contact_auto_reply(category, name)
+        _send_resend_smtp(email, subject, reply)
+        flash("Thanks — your message has been received. We’ll get back to you soon.", "success")
+        return redirect(url_for("contact"))
+
     return render_template("contact.html")
 
 @app.route("/privacy")
