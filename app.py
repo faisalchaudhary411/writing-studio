@@ -1262,6 +1262,26 @@ def freelancer():
 def subtitles():
     return render_template("subtitles.html")
 
+@app.route("/proofread")
+def proofread():
+    return render_template("proofread.html")
+
+@app.route("/youtube-seo")
+def youtube_seo():
+    return render_template("youtube_seo.html")
+
+@app.route("/resume")
+def resume():
+    return render_template("resume.html")
+
+@app.route("/whatsapp-replies")
+def whatsapp_replies():
+    return render_template("whatsapp_replies.html")
+
+@app.route("/script-timing")
+def script_timing():
+    return render_template("script_timing.html")
+
 @app.route("/blog")
 def blog():
     posts = [p for p in _get_blog_posts() if p.get("published")]
@@ -1287,6 +1307,11 @@ def sitemap():
         ("/urdu-writer", "0.9", "weekly"),
         ("/freelancer", "0.9", "weekly"),
         ("/subtitles", "0.9", "weekly"),
+        ("/proofread", "0.85", "weekly"),
+        ("/youtube-seo", "0.85", "weekly"),
+        ("/resume", "0.85", "weekly"),
+        ("/whatsapp-replies", "0.85", "weekly"),
+        ("/script-timing", "0.8", "weekly"),
         ("/blog", "0.7", "weekly"),
         ("/request-pro", "0.6", "monthly"),
         ("/about", "0.4", "yearly"),
@@ -1632,6 +1657,307 @@ def api_translate_srt():
         return jsonify({"error": "The translation was cut off partway through and would be broken in a video player. Try splitting the file into smaller chunks."}), 500
     record_action()
     return jsonify({"result": result})
+
+@app.route("/api/proofread", methods=["POST"])
+def api_proofread():
+    if not can_act():
+        return jsonify({"error": "Daily limit reached. Upgrade to Pro for unlimited access."}), 429
+    data = request.get_json() or {}
+    text = data.get("text", "").strip()
+    lang = data.get("lang", "Pure Urdu (اردو)")
+    focus = data.get("focus", "Full proofread (grammar + spelling + style)")
+    if not text:
+        return jsonify({"error": "Text is required"}), 400
+    if len(text) > 12000:
+        return jsonify({"error": "Text is too long. Please proofread in smaller chunks (under ~3000 words)."}), 400
+    lang_inst = {
+        "Pure Urdu (اردو)": "Input is in pure Urdu script. Correct grammar, spelling (املا), and natural Pakistani Urdu style. Keep pure Urdu output.",
+        "Roman Urdu": "Input is Roman Urdu. Fix spelling, grammar, and make it sound like natural Pakistani WhatsApp-style Roman Urdu. Keep Roman Urdu output.",
+        "Mixed (Urdu + English)": "Input mixes Urdu and English. Fix errors while preserving the natural mix. Output in the same mixed style."
+    }.get(lang, "Correct the text naturally.")
+    focus_inst = {
+        "Full proofread (grammar + spelling + style)": "Do a full proofread: fix spelling, grammar, punctuation, and improve awkward phrasing so it sounds natural and human.",
+        "Spelling only": "Fix only spelling / املا mistakes. Do not rewrite style or structure unless a spelling fix forces a small change.",
+        "Grammar only": "Fix only grammar and sentence structure. Keep the writer's original word choices where possible.",
+        "Make more natural / less formal": "Rewrite to sound more natural and less formal/robotic while keeping the meaning. Prefer everyday Pakistani wording."
+    }.get(focus, "Full proofread.")
+    system = f"""You are an expert Pakistani Urdu editor and proofreader.
+
+{lang_inst}
+{focus_inst}
+
+Output format (strict):
+1) First output the FULL corrected text.
+2) Then a blank line and the separator: ---CHANGES---
+3) Then a short bullet list of the main fixes you made (in the same language as the text). If almost nothing needed fixing, say so.
+
+Do not add preamble before the corrected text. Do not invent new content — only correct and lightly polish what was given."""
+    tokens = min(6000, max(1500, len(text) // 2 + 800))
+    result, err, truncated = call_llm(system, text, tokens)
+    if err:
+        return jsonify({"error": err}), 500
+    record_action()
+    resp = {"result": result}
+    if truncated:
+        resp["warning"] = "Output may be incomplete — try a shorter text chunk."
+    return jsonify(resp)
+
+@app.route("/api/generate-youtube-seo", methods=["POST"])
+def api_generate_youtube_seo():
+    if not can_act():
+        return jsonify({"error": "Daily limit reached. Upgrade to Pro for unlimited access."}), 429
+    data = request.get_json() or {}
+    topic = data.get("topic", "").strip()
+    lang = data.get("lang", "Pure Urdu (اردو)")
+    niche = data.get("niche", "General / Educational")
+    channel = data.get("channel", "").strip()
+    if not topic:
+        return jsonify({"error": "Topic or script summary is required"}), 400
+    lang_inst = {
+        "Pure Urdu (اردو)": "Write titles, description and tags primarily in pure Pakistani Urdu (Nastaliq-friendly wording).",
+        "Roman Urdu": "Write in natural Roman Urdu as Pakistanis type on YouTube.",
+        "English": "Write in clear, SEO-friendly English.",
+        "Mixed (Urdu + English)": "Use a natural Urdu-English mix common on Pakistani YouTube."
+    }.get(lang, "Write in natural language for Pakistani viewers.")
+    channel_line = f"Channel name for CTA: {channel}" if channel else "No specific channel name — use generic subscribe CTA."
+    system = f"""You are a YouTube growth expert for Pakistani creators.
+
+Niche: {niche}
+{lang_inst}
+{channel_line}
+
+Given the video topic/summary, produce:
+
+## TITLES (8 options)
+- Mix of curiosity, benefit, and keyword-rich titles
+- Keep under ~70 characters where possible
+- Number them 1-8
+
+## DESCRIPTION
+- First 2 lines must be strong (shown in search)
+- Include natural keywords
+- Add timestamps placeholder section if the topic suits a longer video
+- End with CTA (subscribe / related)
+
+## TAGS
+- 15-25 comma-separated tags
+- Mix broad + specific + long-tail
+- Include both Urdu/Roman and English variants where useful
+
+## HASHTAGS
+- 3-5 relevant hashtags for the description end
+
+Be specific to the topic. No generic filler. Sound human, not spammy."""
+    result, err, truncated = call_llm(system, f"Video topic / summary:\n\n{topic}", 2500)
+    if err:
+        return jsonify({"error": err}), 500
+    record_action()
+    resp = {"result": result}
+    if truncated:
+        resp["warning"] = "Output may be cut off — try a shorter topic summary."
+    return jsonify(resp)
+
+@app.route("/api/generate-resume", methods=["POST"])
+def api_generate_resume():
+    if not can_act():
+        return jsonify({"error": "Daily limit reached. Upgrade to Pro for unlimited access."}), 429
+    data = request.get_json() or {}
+    name = data.get("name", "").strip()
+    role = data.get("role", "").strip()
+    email = data.get("email", "").strip()
+    phone = data.get("phone", "").strip()
+    location = data.get("location", "").strip()
+    lang = data.get("lang", "English (Professional)")
+    summary = data.get("summary", "").strip()
+    experience = data.get("experience", "").strip()
+    education = data.get("education", "").strip()
+    skills = data.get("skills", "").strip()
+    extra = data.get("extra", "").strip()
+    if not name or not role:
+        return jsonify({"error": "Name and target role are required"}), 400
+    lang_inst = {
+        "English (Professional)": "Write the entire CV in professional English.",
+        "Pure Urdu (اردو)": "Write the entire CV in clear, professional pure Pakistani Urdu.",
+        "Roman Urdu": "Write the entire CV in natural Roman Urdu (professional but readable).",
+        "Bilingual (Urdu + English)": "Produce a bilingual CV: section headers and key lines in both English and Urdu where natural; keep it clean and scannable."
+    }.get(lang, "Write in professional English.")
+    system = f"""You are a career coach and resume writer helping Pakistani freelancers and job seekers (Fiverr, Upwork, local companies).
+
+{lang_inst}
+
+Build a clean, modern plain-text resume (not markdown tables). Structure:
+
+NAME
+Role title
+Contact line (email · phone · location)
+
+PROFESSIONAL SUMMARY
+(2-4 strong sentences; invent a polished summary from the facts if the user left it blank — never invent fake jobs)
+
+EXPERIENCE
+(each role: title, company, dates if given, 2-4 achievement bullets)
+
+EDUCATION
+
+SKILLS
+(grouped if helpful)
+
+ADDITIONAL
+(certs, languages, links)
+
+Rules:
+- Do NOT invent employers, degrees, or dates the user did not provide.
+- Strengthen weak bullet points into achievement-style language when the facts allow.
+- Keep it concise (one page worth of text).
+- Output ONLY the resume text, no preamble."""
+    user_blob = f"""Name: {name}
+Target role: {role}
+Email: {email}
+Phone: {phone}
+Location: {location}
+Summary from user: {summary or '(auto-generate from experience)'}
+Experience:
+{experience or '(none provided)'}
+Education:
+{education or '(none provided)'}
+Skills: {skills or '(none provided)'}
+Extra: {extra or '(none)'}"""
+    result, err, truncated = call_llm(system, user_blob, 2500)
+    if err:
+        return jsonify({"error": err}), 500
+    record_action()
+    resp = {"result": result}
+    if truncated:
+        resp["warning"] = "Resume may be incomplete — try shortening the experience section."
+    return jsonify(resp)
+
+@app.route("/api/generate-whatsapp-replies", methods=["POST"])
+def api_generate_whatsapp_replies():
+    if not can_act():
+        return jsonify({"error": "Daily limit reached. Upgrade to Pro for unlimited access."}), 429
+    data = request.get_json() or {}
+    biz = data.get("biz", "Online shop / e-commerce")
+    lang = data.get("lang", "Roman Urdu")
+    name = data.get("name", "").strip()
+    scenario = data.get("scenario", "Welcome / greeting message")
+    details = data.get("details", "").strip()
+    lang_inst = {
+        "Roman Urdu": "Write in natural Roman Urdu — exactly how Pakistani shop owners type on WhatsApp.",
+        "Pure Urdu (اردو)": "Write in pure Urdu script, short and clear.",
+        "Mixed (Urdu + English)": "Natural Urdu-English mix common in Pakistani business WhatsApp.",
+        "English": "Clear, friendly professional English."
+    }.get(lang, "Natural Roman Urdu.")
+    name_line = f"Business name: {name}" if name else "No specific business name — keep generic or use placeholders like [Shop Name]."
+    system = f"""You write WhatsApp Business auto-replies for Pakistani small businesses.
+
+Business type: {biz}
+Scenario requested: {scenario}
+{name_line}
+{lang_inst}
+
+Rules:
+- Short messages (WhatsApp-friendly). Use line breaks.
+- Warm, professional, not robotic.
+- Include practical placeholders in [brackets] where the owner should fill details (price, time, link).
+- If "Full set" is requested, output clearly labeled separate messages: Welcome, Away, Price inquiry, Order confirmation.
+- For a single scenario, output 2-3 alternative versions the owner can choose from.
+- No hashtags, no markdown tables. Plain text ready to copy-paste into WhatsApp Business.
+
+Extra context from the owner:
+{details or '(none)'}"""
+    result, err, truncated = call_llm(system, f"Generate WhatsApp replies for: {scenario}", 2000)
+    if err:
+        return jsonify({"error": err}), 500
+    record_action()
+    resp = {"result": result}
+    if truncated:
+        resp["warning"] = "Output may be cut off — try a narrower scenario."
+    return jsonify(resp)
+
+@app.route("/api/estimate-script-timing", methods=["POST"])
+def api_estimate_script_timing():
+    if not can_act():
+        return jsonify({"error": "Daily limit reached. Upgrade to Pro for unlimited access."}), 429
+    data = request.get_json() or {}
+    script = data.get("script", "").strip()
+    lang = data.get("lang", "Pure Urdu (اردو)")
+    pace = data.get("pace", "Natural / conversational (~130 wpm)")
+    target = data.get("target", "")
+    if not script:
+        return jsonify({"error": "Script is required"}), 400
+    if len(script) > 20000:
+        return jsonify({"error": "Script is too long for one pass. Split into sections."}), 400
+    # Deterministic word/char stats for reliability
+    words = len(script.split())
+    chars = len(script.replace(" ", "").replace("\n", ""))
+    # Rough WPM from pace label
+    wpm_map = {
+        "Natural / conversational (~130 wpm)": 130,
+        "Slightly fast (YouTube energy ~150 wpm)": 150,
+        "Slow & clear (tutorials ~110 wpm)": 110,
+        "Very slow / dramatic (~90 wpm)": 90,
+    }
+    wpm = wpm_map.get(pace, 130)
+    # Urdu script tends to have fewer "words" by space-split but slower articulation; bump slightly for pure Urdu
+    if lang == "Pure Urdu (اردو)":
+        effective_wpm = max(80, int(wpm * 0.85))
+    else:
+        effective_wpm = wpm
+    minutes = words / effective_wpm if effective_wpm else 0
+    secs = int(round(minutes * 60))
+    mm, ss = divmod(secs, 60)
+    target_note = ""
+    if target:
+        try:
+            tmin = float(target)
+            if tmin > 0:
+                needed_wpm = words / tmin
+                target_note = f"Target length: {tmin} min → needed pace ≈ {needed_wpm:.0f} words/min."
+        except ValueError:
+            pass
+    stats_block = f"""QUICK STATS (calculated)
+- Word count: {words}
+- Characters (no spaces): {chars}
+- Selected pace: {pace} (effective ~{effective_wpm} wpm for this language)
+- Estimated spoken duration: {mm} min {ss:02d} sec
+{target_note}"""
+    system = f"""You are a video producer helping Pakistani YouTube/TikTok creators time voice-over scripts.
+
+Language of script: {lang}
+Pace preference: {pace}
+
+The user pasted a script. You already have calculated stats (will be shown). Your job:
+1) Confirm or slightly adjust the estimate if the script has many pauses, lists, or dense technical terms.
+2) Break the script into logical sections with approximate timestamps (0:00, 0:45, ...).
+3) Give 3-5 concrete pacing tips (where to slow down, where to cut, ideal target length).
+4) If a target length was given and the script is too long/short, suggest what to cut or expand.
+
+Output in clear English with optional Roman Urdu tips. Structure:
+
+## ESTIMATE
+(duration + confidence)
+
+## SECTION BREAKDOWN
+(timestamp ranges + 1-line summary each)
+
+## PACING TIPS
+(bullets)
+
+## IF YOU NEED TO HIT A TARGET
+(only if relevant)
+
+Keep it practical. Do not rewrite the full script unless a short example cut is useful."""
+    user_msg = f"{stats_block}\n\n--- SCRIPT ---\n{script[:8000]}"
+    result, err, truncated = call_llm(system, user_msg, 2200)
+    if err:
+        return jsonify({"error": err}), 500
+    record_action()
+    # Prepend deterministic stats so the user always gets numbers even if LLM is vague
+    full = stats_block + "\n\n" + (result or "")
+    resp = {"result": full}
+    if truncated:
+        resp["warning"] = "Analysis may be incomplete for very long scripts."
+    return jsonify(resp)
 
 @app.route("/api/actions-left")
 def api_actions_left():
