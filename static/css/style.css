@@ -1073,3 +1073,33 @@ body {
 @media (max-width: 768px) {
   .footer-grid { grid-template-columns: 1fr; gap: 1.5rem; }
 }
+
+/* ── Footer mobile layout fix ── */
+@media (max-width: 768px) {
+  .footer { padding: 2rem 0 1.5rem; }
+
+  /* Keep Tools and Company side-by-side instead of stacking the entire
+     footer into one very tall column. */
+  .footer-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.75rem 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .footer-col { gap: 0.45rem; }
+
+  /* Brand/contact information gets its own full-width row. */
+  .footer-col:nth-child(3) {
+    grid-column: 1 / -1;
+    padding-top: 0.25rem;
+  }
+
+  .footer-link { font-size: 0.78rem; line-height: 1.35; }
+  .footer-heading { margin-bottom: 0.2rem; }
+  .footer-copy { line-height: 1.6; }
+}
+
+@media (max-width: 380px) {
+  .footer-grid { gap: 1.5rem 0.75rem; }
+  .footer-link { font-size: 0.74rem; }
+}
