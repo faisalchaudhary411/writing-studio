@@ -37,6 +37,19 @@ class Config:
             )
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB uploads
     GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+    CEREBRAS_API_KEY = os.environ.get("CEREBRAS_API_KEY", "")
+    OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+    # Model slugs are env-overridable, not hardcoded: every provider here has
+    # deprecated/renamed models on short notice at least once in the past
+    # year (this whole fallback chain exists because llama-3.3-70b-versatile
+    # was pulled out from under this app with no warning). If a provider
+    # retires another model, set the env var on Render instead of needing a
+    # code change. Defaults below are each provider's own currently-
+    # recommended general-purpose model as of this writing — verify against
+    # each provider's live model list before relying on them long-term.
+    GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+    CEREBRAS_MODEL = os.environ.get("CEREBRAS_MODEL", "llama-4-scout")
+    OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "openai/gpt-oss-120b")
     ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", hashlib.sha256(os.urandom(32)).hexdigest()[:16])
     # Freemius API (replaces LemonSqueezy)
     FREEMIUS_API_KEY = os.environ.get("FREEMIUS_API_KEY", "")
@@ -1032,45 +1045,98 @@ def can_act():
     return session.get("is_pro") or get_user_actions_left() > 0
 
 # ──────────────────────────────────────────────────────────────────────
-# GROQ AI
+# LLM PROVIDERS — Groq (primary) → Cerebras → OpenRouter (fallbacks)
 # ──────────────────────────────────────────────────────────────────────
-def call_groq(system: str, user: str, max_tokens=2000):
-    """BUG FIX: this never checked Groq's finish_reason field, so when a
-    response got cut off because it hit max_tokens (finish_reason=="length"),
-    the truncated/incomplete content was returned as if it were a normal,
-    complete result — with no way for the caller (or the user) to know it
-    was cut off. This is very likely the source of 'corrupted/garbage'
-    output reports: for content types with variable output length (long Urdu
-    articles, SRT subtitle files, translations of long files), the fixed
-    max_tokens value across all endpoints was often too low, and cut-off SRT
-    files in particular can look like garbage to a video player since the
-    truncation point breaks the file's syntax entirely.
+# Groq deprecated llama-3.3-70b-versatile (shutdown Aug 16, 2026) — the
+# model every generation feature on this site was hardcoded to. When Groq
+# pulled it, every tool broke at once with no degraded mode, because there
+# was exactly one provider and one model. Two independent fixes here: (1)
+# the model itself, and (2) the app no longer depends on any single
+# provider surviving — if Groq has an outage, gets rate-limited, or
+# deprecates a model again, Cerebras and then OpenRouter pick up the
+# request instead of every tool on the site going down together.
+def _call_groq(system: str, user: str, max_tokens: int):
+    if not Config.GROQ_API_KEY:
+        return None, "GROQ_API_KEY not set", False
+    r = req.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers={"Authorization": f"Bearer {Config.GROQ_API_KEY}", "Content-Type": "application/json"},
+        json={"model": Config.GROQ_MODEL, "max_tokens": min(max_tokens, 8000),
+              "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]},
+        timeout=60
+    )
+    if r.status_code == 200:
+        choice = r.json()["choices"][0]
+        return choice["message"]["content"], None, choice.get("finish_reason") == "length"
+    return None, f"Groq {r.status_code}: {r.text[:200]}", False
 
-    Returns (content, error, was_truncated) — callers should check
-    was_truncated and warn the user rather than presenting a cut-off result
-    as if it were complete.
+def _call_cerebras(system: str, user: str, max_tokens: int):
+    if not Config.CEREBRAS_API_KEY:
+        return None, "CEREBRAS_API_KEY not set", False
+    r = req.post(
+        "https://api.cerebras.ai/v1/chat/completions",
+        headers={"Authorization": f"Bearer {Config.CEREBRAS_API_KEY}", "Content-Type": "application/json"},
+        json={"model": Config.CEREBRAS_MODEL, "max_tokens": min(max_tokens, 8000),
+              "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]},
+        timeout=60
+    )
+    if r.status_code == 200:
+        choice = r.json()["choices"][0]
+        return choice["message"]["content"], None, choice.get("finish_reason") == "length"
+    return None, f"Cerebras {r.status_code}: {r.text[:200]}", False
+
+def _call_openrouter(system: str, user: str, max_tokens: int):
+    if not Config.OPENROUTER_API_KEY:
+        return None, "OPENROUTER_API_KEY not set", False
+    r = req.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers={"Authorization": f"Bearer {Config.OPENROUTER_API_KEY}", "Content-Type": "application/json",
+                 # OpenRouter asks for these two headers to attribute traffic
+                 # on their public rankings page — harmless to include, and
+                 # some free-tier routing behaves better with them set.
+                 "HTTP-Referer": "https://qalamstudio.xyz", "X-Title": "QalamStudio"},
+        json={"model": Config.OPENROUTER_MODEL, "max_tokens": min(max_tokens, 8000),
+              "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]},
+        timeout=60
+    )
+    if r.status_code == 200:
+        choice = r.json()["choices"][0]
+        return choice["message"]["content"], None, choice.get("finish_reason") == "length"
+    return None, f"OpenRouter {r.status_code}: {r.text[:200]}", False
+
+_LLM_PROVIDERS = [("Groq", _call_groq), ("Cerebras", _call_cerebras), ("OpenRouter", _call_openrouter)]
+
+def call_llm(system: str, user: str, max_tokens=2000):
+    """Tries each configured provider in order and returns the first
+    success. A provider is skipped instantly (no network call) if its API
+    key isn't set, so you don't need all three configured — Groq alone
+    still works exactly as before, Cerebras/OpenRouter just add resilience
+    if you set their keys too.
+
+    BUG FIX (kept from the original single-provider version): the response
+    is checked for finish_reason=="length" — if a provider cuts a response
+    off for hitting max_tokens, that's reported as `was_truncated` rather
+    than silently returned as if it were a complete result. This was very
+    likely the source of past 'corrupted/garbage' output reports: long Urdu
+    articles, SRT files, and translations can all legitimately exceed a
+    fixed max_tokens value, and a cut-off SRT file in particular looks like
+    garbage to a video player since the truncation point breaks the file's
+    syntax entirely.
+
+    Returns (content, error, was_truncated). `error` is only set if EVERY
+    configured provider failed — it's a combined message from all of them,
+    for logging/debugging, not meant to be shown to the end user verbatim.
     """
-    try:
-        if not Config.GROQ_API_KEY:
-            return None, "GROQ_API_KEY not set", False
-        # Groq's hard ceiling for this model is 8192 output tokens per
-        # request — asking for more than that fails outright, so clamp here
-        # rather than let a bad max_tokens value break the request.
-        max_tokens = min(max_tokens, 8000)
-        r = req.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {Config.GROQ_API_KEY}", "Content-Type": "application/json"},
-            json={"model": "llama-3.3-70b-versatile", "max_tokens": max_tokens,
-                  "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]},
-            timeout=60
-        )
-        if r.status_code == 200:
-            choice = r.json()["choices"][0]
-            was_truncated = choice.get("finish_reason") == "length"
-            return choice["message"]["content"], None, was_truncated
-        return None, f"API error {r.status_code}", False
-    except Exception as e:
-        return None, str(e), False
+    errors = []
+    for name, fn in _LLM_PROVIDERS:
+        try:
+            content, err, truncated = fn(system, user, max_tokens)
+        except Exception as e:
+            content, err, truncated = None, str(e), False
+        if content is not None:
+            return content, None, truncated
+        errors.append(f"{name}: {err}")
+    return None, " | ".join(errors), False
 
 def get_urdu_prompt(content_type, tone, lang_style, word_count):
     lang = {
@@ -1396,7 +1462,7 @@ def api_generate_urdu():
         "Medium (300-500 words)": 2200,
         "Long (600-1000 words)": 4000,
     }.get(word_count, 2200)
-    result, err, truncated = call_groq(system, f"اس موضوع پر لکھو: {topic}", tokens_for_length)
+    result, err, truncated = call_llm(system, f"اس موضوع پر لکھو: {topic}", tokens_for_length)
     if err:
         return jsonify({"error": err}), 500
     record_action()
@@ -1423,7 +1489,7 @@ def api_generate_proposal():
         "Pure Urdu": "قدرتی پاکستانی اردو میں — professional مگر روبوٹ نہیں۔"
     }
     sys_p = f"You are an expert proposal writer for Pakistani freelancers.\n{lm[prop_lang]}\nPlatform: {platform}. Structure: Strong opening hook → Show you understood requirements → Your relevant experience → Clear deliverables → Timeline → CTA."
-    result, err, truncated = call_groq(sys_p, f"Service: {service}\nClient needs: {client_need}\nMy experience: {your_exp or 'Not specified'}", 1400)
+    result, err, truncated = call_llm(sys_p, f"Service: {service}\nClient needs: {client_need}\nMy experience: {your_exp or 'Not specified'}", 1400)
     if err:
         return jsonify({"error": err}), 500
     record_action()
@@ -1491,7 +1557,7 @@ def api_generate_email():
         "Pure Urdu": "قدرتی اردو میں — پیشہ ورانہ اور گرمجوش۔"
     }
     sys_e = f"You are an expert email writer for Pakistani freelancers.\n{lm[elang]}\nTone: {etone}. Write for: {etype}.\nInclude Subject, greeting, body, closing. Be concise and human."
-    result, err, truncated = call_groq(sys_e, f"Context: {ectx}", 1000)
+    result, err, truncated = call_llm(sys_e, f"Context: {ectx}", 1000)
     if err:
         return jsonify({"error": err}), 500
     record_action()
@@ -1524,7 +1590,7 @@ def api_generate_srt():
     tokens_needed = min(8000, max(2000, dur * 700))
     li = {"Urdu (اردو)": "قدرتی اردو میں convert کرو۔", "Roman Urdu": "Roman Urdu میں convert کرو۔", "English": "Keep in English.", "Hindi": "Hindi script میں۔", "Arabic": "Arabic script میں۔"}
     sys_s = f"Professional subtitle generator.\n{li[slang]}\nSRT format. Max {wps} words per subtitle. Distribute timing across {dur} minutes.\nOutput ONLY valid SRT. No preamble."
-    result, err, truncated = call_groq(sys_s, f"Convert to SRT:\n\n{script}", tokens_needed)
+    result, err, truncated = call_llm(sys_s, f"Convert to SRT:\n\n{script}", tokens_needed)
     if err:
         return jsonify({"error": err}), 500
     if truncated:
@@ -1559,7 +1625,7 @@ def api_translate_srt():
           "Roman Urdu": "Roman Urdu میں translate کرو۔ Timestamps identical رکھو۔",
           "Mixed Urdu-English": "Natural Urdu-English mix میں۔ Timestamps مت بدلو۔"}
     sys_t = f"Professional Urdu subtitle translator.\n{tm[tstyle]}\nOutput ONLY translated SRT. Never touch timestamps or numbers."
-    result, err, truncated = call_groq(sys_t, f"Translate:\n\n{eng_srt}", tokens_needed)
+    result, err, truncated = call_llm(sys_t, f"Translate:\n\n{eng_srt}", tokens_needed)
     if err:
         return jsonify({"error": err}), 500
     if truncated:
@@ -1876,6 +1942,9 @@ def admin_dashboard():
         now=datetime.datetime.now(),
         login_attempts=login_attempts,
         gh_token_set=bool(Config.GITHUB_TOKEN),
+        groq_set=bool(Config.GROQ_API_KEY),
+        cerebras_set=bool(Config.CEREBRAS_API_KEY),
+        openrouter_set=bool(Config.OPENROUTER_API_KEY),
         resend_set=bool(Config.RESEND_API_KEY),
         smtp_set=bool(Config.SMTP_HOST and Config.SMTP_USER and Config.SMTP_PASS),
         wa_set=bool(Config.WHATSAPP_API_TOKEN and Config.WHATSAPP_PHONE_NUMBER_ID),
