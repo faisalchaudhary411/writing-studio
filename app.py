@@ -153,6 +153,7 @@ _F_LIMITS = "limits.json"
 _F_USAGE = "usage_tracking.json"
 _F_KEYS = "license_keys.json"
 _F_REQUESTS = "pro_requests.json"
+_F_LOGIN_ATTEMPTS = "admin_login_attempts.json"
 
 def _gh_read(filename: str, repo: str = None):
     repo = repo or Config.GH_REPO
@@ -303,6 +304,7 @@ _ensure_file(_F_REQUESTS, [])
 _ensure_file(_F_KEYS, {})
 _ensure_file(_F_BLOGS, [])
 _ensure_file(_F_USAGE, {})
+_ensure_file(_F_LOGIN_ATTEMPTS, {})
 _ensure_file(_F_LIMITS, {
     "FREE_DAILY_ACTIONS": Config.FREE_DAILY_ACTIONS,
     "PRO_PRICE_PKR": Config.PRO_PRICE_PKR,
@@ -399,6 +401,10 @@ def _get_usage():
 
 def _save_usage(data):
     return _gh_write(_F_USAGE, data, "Update usage")
+
+def _get_login_attempts():
+    data = _gh_read(_F_LOGIN_ATTEMPTS)
+    return data if isinstance(data, dict) else {}
 
 def _get_blog_posts():
     data = _gh_read(_F_BLOGS)
@@ -1761,26 +1767,87 @@ html,body{{background:transparent;height:{height}px;overflow:hidden;text-align:c
 
 
 # ──────────────────────────────────────────────────────────────────────
+# ADMIN LOGIN RATE-LIMITING
+# ──────────────────────────────────────────────────────────────────────
+# Persisted via GitHub-JSON (same CAS transaction pattern as license
+# activation) rather than in-memory: this app runs multiple gunicorn
+# workers, so an in-memory counter would let an attacker get N free
+# guesses PER WORKER before any of them noticed the others' failures.
+# Login attempts are rare enough (unlike per-generation usage tracking)
+# that a synchronous transaction on every attempt is fine here — no need
+# for the fire-and-forget trade-off used for free-tier action counts.
+_LOGIN_MAX_ATTEMPTS = 5
+_LOGIN_WINDOW_SECONDS = 900   # 15 min window for counting failures
+_LOGIN_LOCKOUT_SECONDS = 900  # 15 min lockout once tripped
+
+def _admin_login_locked(ip_hash: str):
+    """Returns seconds remaining if this IP is currently locked out, else 0."""
+    data = _get_login_attempts()
+    rec = data.get(ip_hash)
+    if not rec or not rec.get("locked_until"):
+        return 0
+    remaining = rec["locked_until"] - time.time()
+    return max(0, int(remaining))
+
+def _record_login_failure(ip_hash: str):
+    now = time.time()
+    def _bump(fresh):
+        rec = fresh.get(ip_hash, {})
+        # Reset the counter if the last failure was outside the window
+        if now - rec.get("window_start", 0) > _LOGIN_WINDOW_SECONDS:
+            rec = {"window_start": now, "count": 0}
+        rec["count"] = rec.get("count", 0) + 1
+        rec["last_attempt"] = now
+        if rec["count"] >= _LOGIN_MAX_ATTEMPTS:
+            rec["locked_until"] = now + _LOGIN_LOCKOUT_SECONDS
+        fresh[ip_hash] = rec
+        return fresh, True
+    _gh_transact(_F_LOGIN_ATTEMPTS, _bump, "Record failed admin login")
+
+def _clear_login_failures(ip_hash: str):
+    def _clear(fresh):
+        if ip_hash in fresh:
+            del fresh[ip_hash]
+            return fresh, True
+        return fresh, None  # nothing to clear, skip the write
+    _gh_transact(_F_LOGIN_ATTEMPTS, _clear, "Clear admin login attempts")
+
+# ──────────────────────────────────────────────────────────────────────
 # ADMIN ROUTES
 # ──────────────────────────────────────────────────────────────────────
 @app.route("/admin", methods=["GET", "POST"])
 def admin_login():
     if session.get("admin_auth"):
         return redirect(url_for("admin_dashboard"))
+
+    ip_hash = _hash_ip(_get_user_ip())
+    locked_for = _admin_login_locked(ip_hash)
+
     if request.method == "POST":
+        if locked_for > 0:
+            flash(f"Too many failed attempts. Try again in {locked_for // 60 + 1} minute(s).", "error")
+            return render_template("admin/login.html", locked=True, locked_for=locked_for)
+
+        email = request.form.get("email", "").strip()
         pwd = request.form.get("password", "")
-        # SECURITY: constant-time comparison. A plain `==` short-circuits on
-        # the first mismatched byte, so response timing leaks how many
-        # leading characters were correct — a timing side-channel an
-        # attacker can use to brute-force the password byte-by-byte.
-        # hmac.compare_digest always takes the same time regardless of
-        # where the strings diverge. Same fix as VoxCraft.
-        if hmac.compare_digest(pwd, Config.ADMIN_PASSWORD):
+        # SECURITY: constant-time comparison on BOTH fields, and both must
+        # match. Email+password (rather than password alone) means an
+        # attacker who somehow guesses/leaks the password still can't get in
+        # without also knowing the admin email — a second, independent
+        # secret, not just a longer version of the same one. Same fix as
+        # VoxCraft. hmac.compare_digest avoids the timing side-channel a
+        # plain `==` would leak on either field.
+        email_ok = bool(Config.ADMIN_EMAIL) and hmac.compare_digest(email.lower(), Config.ADMIN_EMAIL.lower())
+        pwd_ok = hmac.compare_digest(pwd, Config.ADMIN_PASSWORD)
+        if email_ok and pwd_ok:
             session["admin_auth"] = True
             session.pop("_csrf_token", None)  # rotate token after login
+            _clear_login_failures(ip_hash)
             return redirect(url_for("admin_dashboard"))
-        flash("Wrong password", "error")
-    return render_template("admin/login.html")
+        _record_login_failure(ip_hash)
+        flash("Wrong email or password", "error")
+        locked_for = _admin_login_locked(ip_hash)
+    return render_template("admin/login.html", locked=locked_for > 0, locked_for=locked_for)
 
 @app.route("/admin/dashboard")
 @admin_required
@@ -1795,11 +1862,19 @@ def admin_dashboard():
     approved = [r for r in requests_list if r.get("status") == "approved"]
     rejected = [r for r in requests_list if r.get("status") == "rejected"]
     posts = _get_blog_posts()
+    # Recent lockouts/high-attempt IPs — most-recent-first, capped to the 10
+    # most active offenders so this doesn't grow unbounded on the dashboard.
+    login_attempts_raw = _get_login_attempts()
+    login_attempts = sorted(
+        [{"ip_hash": k, **v} for k, v in login_attempts_raw.items()],
+        key=lambda r: r.get("last_attempt", 0), reverse=True
+    )[:10]
     return render_template("admin/dashboard.html",
         fresh=fresh, used=used, revoked=revoked,
         limits=limits, pending=pending, approved=approved,
         rejected=rejected, posts=posts, keys=keys,
         now=datetime.datetime.now(),
+        login_attempts=login_attempts,
         gh_token_set=bool(Config.GITHUB_TOKEN),
         resend_set=bool(Config.RESEND_API_KEY),
         smtp_set=bool(Config.SMTP_HOST and Config.SMTP_USER and Config.SMTP_PASS),
@@ -1844,6 +1919,19 @@ def admin_unrevoke_key():
         keys[key]["revoked"] = False
         _save_license_keys(keys)
     return jsonify({"success": True})
+
+@app.route("/admin/api/unlock-login", methods=["POST"])
+@admin_required
+def admin_unlock_login():
+    """Support control: clear a locked-out IP's failure count manually —
+    e.g. you (the admin) got locked out yourself after a typo streak, or a
+    shared office/CGNAT IP tripped the lockout for someone else on it."""
+    data = request.get_json() or {}
+    ip_hash = data.get("ip_hash", "").strip()
+    if ip_hash:
+        _clear_login_failures(ip_hash)
+        return jsonify({"success": True})
+    return jsonify({"success": False, "error": "Missing ip_hash"})
 
 @app.route("/admin/api/reset-device-key", methods=["POST"])
 @admin_required
