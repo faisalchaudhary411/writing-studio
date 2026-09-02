@@ -5,3 +5,12 @@ requests>=2.31.0
 Werkzeug>=2.3.0
 gunicorn>=21.0.0
 Pillow>=10.0.0
+# HARDENING: OCR cross-check for manual-payment auto-approval (see
+# _ocr_extract_text in app.py). Also requires the tesseract-ocr SYSTEM
+# binary, which is NOT installed by pip and is NOT available on Render's
+# native Python runtime by default — without it, OCR checks gracefully
+# degrade to "inconclusive" and auto-approval falls back to admin review
+# for every request. To actually get instant auto-approval working, this
+# deployment needs a Dockerfile that apt-installs tesseract-ocr (Render's
+# native/buildpack runtime has no aptfile mechanism for this).
+pytesseract>=0.3.10

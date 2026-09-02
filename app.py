@@ -515,7 +515,7 @@ def generate_license_key() -> str:
     suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=14))
     return f"QALAM-PRO-{suffix}"
 
-def create_new_key(grace_hours=None):
+def create_new_key(grace_hours=None, expires_at=None):
     key = generate_license_key()
     keys = _get_license_keys()
     key_data = {
@@ -531,9 +531,87 @@ def create_new_key(grace_hours=None):
     }
     if grace_hours:
         key_data["grace_expires"] = (datetime.datetime.now() + datetime.timedelta(hours=grace_hours)).strftime("%Y-%m-%d %H:%M")
+    # A real subscription expiry (Freemius-backed or admin-approved manual
+    # Pro) — see the HARDENING note on check_license() for why this field
+    # not existing at all before meant every non-grace key was Pro forever.
+    if expires_at:
+        key_data["expires_at"] = _normalize_freemius_date(expires_at) or expires_at
     keys[key] = key_data
     _save_license_keys(keys)
     return key
+
+def _normalize_freemius_date(raw: str) -> str:
+    """Freemius sends license expiration timestamps as
+    'YYYY-MM-DD HH:MM:SS' (with seconds, sometimes with a 'T' separator) —
+    normalize to this app's 'YYYY-MM-DD HH:MM' storage format used
+    everywhere else (grace_expires, created, etc). Returns '' on anything
+    unparseable so callers can fall back to a sane default instead of
+    storing a string that'll later fail strptime and get silently
+    swallowed by the bare except in check_license()."""
+    if not raw:
+        return ""
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            return datetime.datetime.strptime(raw, fmt).strftime("%Y-%m-%d %H:%M")
+        except ValueError:
+            continue
+    return ""
+
+def find_key_by_freemius_id(freemius_license_id: str):
+    """Looks up an internal key by the Freemius license ID stored on it at
+    creation time — used by the renewal/cancellation webhook events, which
+    only ever carry the Freemius license ID, not our internal key string."""
+    if not freemius_license_id:
+        return None
+    keys = _get_license_keys()
+    for k, v in keys.items():
+        if str(v.get("freemius_license_id", "")) == str(freemius_license_id):
+            return k
+    return None
+
+def sync_license_from_freemius_event(freemius_license_id: str, event_type: str, new_expiration: str = "") -> dict:
+    """HARDENING — this whole function is new. Handles license.extended /
+    license.cancelled / license.expired, which the webhook previously
+    didn't handle AT ALL (every event besides the initial purchase fell
+    through to "Event ignored"). Combined with create_new_key() never
+    setting any expiry on a Freemius-sourced key (see its own note), this
+    meant a QalamStudio Pro subscriber who cancelled kept full Pro access
+    forever — there was no mechanism that would ever revoke or expire
+    their key, no matter how long past their last real payment.
+
+    This mirrors VoxCraft's already-working licensing.py pattern:
+      - license.extended: push expires_at out to whatever Freemius says the
+        new period ends (never guess +30 days blindly — an annual renewal
+        would otherwise get cut off after 30 days), and clear any prior
+        revoke (recovers from a failed-then-retried renewal).
+      - license.expired: revoke — safety net in case a renewal's extend
+        event was ever missed.
+      - license.cancelled: deliberately NOT revoked here — Freemius keeps
+        the license valid through the period the customer already paid
+        for; license.expired fires separately once that period actually
+        ends.
+    """
+    if not freemius_license_id:
+        return {"success": False, "error": "No freemius_license_id in webhook payload."}
+    key = find_key_by_freemius_id(freemius_license_id)
+    if not key:
+        return {"success": False, "error": f"No internal key found for Freemius license {freemius_license_id} — was it ever created via the initial purchase webhook?"}
+    keys = _get_license_keys()
+    info = keys[key]
+    if event_type == "license.extended":
+        info["expires_at"] = _normalize_freemius_date(new_expiration) if new_expiration else \
+            (datetime.datetime.now() + datetime.timedelta(days=30)).strftime("%Y-%m-%d %H:%M")
+        info["revoked"] = False
+        info["renewal_count"] = info.get("renewal_count", 0) + 1
+        _save_license_keys(keys)
+        return {"success": True, "action": "extended", "key": key, "new_expiry": info["expires_at"]}
+    if event_type == "license.expired":
+        info["revoked"] = True
+        _save_license_keys(keys)
+        return {"success": True, "action": "revoked_expired", "key": key}
+    if event_type == "license.cancelled":
+        return {"success": True, "action": "cancellation_noted", "key": key}
+    return {"success": False, "error": "unhandled event"}
 
 def create_freemius_license(user_name, user_email, freemius_meta=None):
     """Mint an internal QalamStudio license key for a completed Freemius purchase.
@@ -552,8 +630,17 @@ def create_freemius_license(user_name, user_email, freemius_meta=None):
     purchase; the webhook is just telling us that happened. We only need our
     own internal key, tied to that purchase, using the exact same generator
     already used for the manual-payment flow.
+
+    HARDENING: previously called create_new_key() with no expiry at all —
+    meaning this key, once minted, was valid forever regardless of what
+    happens to the actual Freemius subscription afterward. Now takes the
+    real expiration Freemius already computed for this purchase (passed in
+    via freemius_meta) so license.extended/expired events (see
+    sync_license_from_freemius_event above) have an existing expires_at to
+    actually update, instead of a permanent key that renewal/cancellation
+    logic could never meaningfully touch.
     """
-    key = create_new_key()
+    key = create_new_key(expires_at=(freemius_meta or {}).get("expiration", ""))
     keys = _get_license_keys()
     keys[key]["source"] = "freemius"
     keys[key]["user_email"] = user_email
@@ -609,6 +696,12 @@ def verify_freemius_license(license_key):
             "freemius_license_id": data.get("id", ""),
             "user_email": data.get("user_email", "") or data.get("email", ""),
             "user_name": data.get("user_name", "") or "Pro User",
+            # HARDENING: wasn't returned before, so fs_callback (the
+            # customer's-browser-lands-here path) had no way to pass a real
+            # expiry into create_freemius_license — only the webhook path
+            # did. Now both paths mint a key with the actual Freemius
+            # billing period instead of one of them being permanent.
+            "expiration": expiration or "",
             "error": None if is_valid else ("License cancelled" if is_cancelled else "License expired"),
         }
     except Exception as e:
@@ -654,6 +747,19 @@ def check_license(key: str) -> dict:
             expires = datetime.datetime.strptime(info["grace_expires"], "%Y-%m-%d %H:%M")
             if datetime.datetime.now() > expires:
                 return {"valid": False, "error": "Grace period expired. Contact support."}
+        except Exception:
+            pass
+    # HARDENING: this check didn't exist at all before — a non-grace key
+    # (Freemius-sourced or admin-approved manual Pro) had no expiry
+    # concept whatsoever, so a cancelled/lapsed subscriber's key kept
+    # returning valid=True forever. See create_new_key/create_freemius_license
+    # and sync_license_from_freemius_event for where expires_at now gets
+    # set and kept in sync with the real Freemius billing period.
+    if info.get("expires_at"):
+        try:
+            expires = datetime.datetime.strptime(info["expires_at"], "%Y-%m-%d %H:%M")
+            if datetime.datetime.now() > expires:
+                return {"valid": False, "error": "Your subscription has expired."}
         except Exception:
             pass
     if not info.get("used"):
@@ -969,21 +1075,193 @@ def _device_already_auto_approved(ip_hash: str) -> bool:
     return False
 
 
+# ── Fraud-hardening helpers for manual-payment auto-approval ──
+# HARDENING: none of this existed before — the only checks were "was a txn
+# id typed" and "is the upload a real image". Porting VoxCraft's already-
+# working fraud layer (same functions, same logic) since this flow controls
+# instant Pro access:
+#   - a live (pending/payment_pending/approved) txn_id or screenshot hash
+#     seen on a second request is essentially always the same payment being
+#     claimed twice, or a fabricated id
+#   - OCR cross-checks that the screenshot the customer uploaded actually
+#     shows the txn_id they typed AND an amount close to what Pro costs —
+#     without this, "upload any image + type any string" was sufficient to
+#     get instant grace-period Pro access
+_LIVE_STATUSES = ("pending", "payment_pending", "approved")
+
+
+def _txn_id_is_duplicate(txn_id: str, exclude_req_id: str = "") -> bool:
+    txn_id = (txn_id or "").strip().lower()
+    if not txn_id:
+        return False
+    for r in _get_requests():
+        if r.get("id") == exclude_req_id:
+            continue
+        if r.get("status") in _LIVE_STATUSES and (r.get("txn_id") or "").strip().lower() == txn_id:
+            return True
+    return False
+
+
+def _screenshot_sha256(screenshot_b64: str) -> str:
+    if not screenshot_b64:
+        return ""
+    try:
+        raw = base64.b64decode(screenshot_b64, validate=True)
+        return hashlib.sha256(raw).hexdigest()
+    except Exception:
+        return ""
+
+
+def _screenshot_is_duplicate(screenshot_hash: str, exclude_req_id: str = "") -> bool:
+    if not screenshot_hash:
+        return False
+    for r in _get_requests():
+        if r.get("id") == exclude_req_id:
+            continue
+        if r.get("status") in _LIVE_STATUSES and r.get("screenshot_sha256") == screenshot_hash:
+            return True
+    return False
+
+
+RATE_LIMIT_MAX_PENDING_PER_IP = 3
+RATE_LIMIT_WINDOW_HOURS = 24
+
+
+def _rate_limited(ip_hash: str) -> bool:
+    """Caps how many still-open requests one device can have in flight at
+    once — stops the admin review queue (and admin's inbox, since every
+    submission emails _notify_admin) from being flooded by someone
+    spamming the form, without touching a genuine customer who'd only ever
+    submit once per purchase."""
+    if not ip_hash:
+        return False
+    cutoff = datetime.datetime.now() - datetime.timedelta(hours=RATE_LIMIT_WINDOW_HOURS)
+    count = 0
+    for r in _get_requests():
+        if r.get("ip") != ip_hash or r.get("status") not in ("pending", "payment_pending"):
+            continue
+        try:
+            if datetime.datetime.strptime(r.get("date", ""), "%Y-%m-%d %H:%M") < cutoff:
+                continue
+        except Exception:
+            pass
+        count += 1
+    return count >= RATE_LIMIT_MAX_PENDING_PER_IP
+
+
+def _ocr_extract_text(screenshot_b64: str) -> str:
+    """Best-effort OCR of the uploaded screenshot. Returns '' — treated as
+    'inconclusive', never as a failure — whenever pytesseract or the
+    underlying tesseract-ocr system binary isn't installed.
+
+    DEPLOYMENT NOTE: Render's native Python runtime does NOT have
+    tesseract-ocr preinstalled, unlike a VPS where `apt install
+    tesseract-ocr` is a one-line fix. Without it, ocr_available is always
+    False below, which means auto-approval requires admin review for
+    EVERY manual payment — AUTO_APPROVE_MANUAL effectively stops instantly
+    approving anyone until tesseract-ocr is available in this deployment
+    (e.g. via a Render Dockerfile that apt-installs it, since the native
+    runtime has no aptfile mechanism). This is a deliberate trade: silent,
+    ungated auto-approval was the actual security hole being closed here."""
+    if not screenshot_b64:
+        return ""
+    try:
+        import pytesseract
+        from PIL import Image
+        import io as _io
+        raw = base64.b64decode(screenshot_b64, validate=True)
+        img = Image.open(_io.BytesIO(raw))
+        return pytesseract.image_to_string(img).lower()
+    except Exception:
+        return ""
+
+
+def _digits_only(s: str) -> str:
+    return "".join(ch for ch in (s or "") if ch.isdigit())
+
+
+def _ocr_txn_id_found(ocr_text: str, txn_id: str) -> bool:
+    txn_digits = _digits_only(txn_id)
+    if len(txn_digits) < 4:
+        return False
+    return txn_digits in _digits_only(ocr_text)
+
+
+def _ocr_amount_found(ocr_text: str, expected_amount, tolerance_pct: float = 2.0) -> bool:
+    if not expected_amount:
+        return False
+    try:
+        expected = float(expected_amount)
+    except Exception:
+        return False
+    if expected <= 0:
+        return False
+    tol = max(expected * (tolerance_pct / 100.0), 1.0)
+    for token in re.findall(r"\d[\d,]*\.?\d*", ocr_text or ""):
+        try:
+            val = float(token.replace(",", ""))
+        except ValueError:
+            continue
+        if abs(val - expected) <= tol:
+            return True
+    return False
+
+
 def submit_pro_request(name, email, phone="", payment_method="", txn_id="", screenshot_b64=""):
     requests_list = _get_requests()
     req_id = f"REQ-{int(time.time())}-{random.randint(1000,9999)}"
     ip_hash = _hash_ip(_get_user_ip())
 
-    # Auto-approve manual payments instantly if enabled — gated behind three
-    # checks now (previously just "was any file uploaded"):
-    #   1. a transaction/reference ID was actually provided
-    #   2. the uploaded file actually decodes as a real image
-    #   3. this device hasn't already received an auto-approval before
+    if _rate_limited(ip_hash):
+        return {"success": False, "id": req_id,
+                "error": "You already have a few payment requests awaiting review. Please wait for those to be processed before submitting another."}
+
+    screenshot_hash = _screenshot_sha256(screenshot_b64)
+    duplicate_txn = _txn_id_is_duplicate(txn_id)
+    duplicate_screenshot = _screenshot_is_duplicate(screenshot_hash)
+
+    limits = _get_limits()
+    expected_amount = int(limits.get("PRO_PRICE_PKR", Config.PRO_PRICE_PKR) or 0)
+
+    ocr_text = _ocr_extract_text(screenshot_b64)
+    ocr_available = bool(ocr_text.strip())
+    ocr_txn_match = _ocr_txn_id_found(ocr_text, txn_id) if ocr_available else False
+    ocr_amount_match = _ocr_amount_found(ocr_text, expected_amount) if ocr_available else False
+
     auto_approved = False
+    auto_rejected = False
+    reject_reason = ""
     license_key = ""
 
-    if (Config.AUTO_APPROVE_MANUAL and txn_id.strip() and _is_valid_image(screenshot_b64)
-            and not _device_already_auto_approved(ip_hash)):
+    # ---- Auto-reject clear junk (never hits admin inbox) ----
+    if duplicate_txn:
+        auto_rejected = True
+        reject_reason = "This transaction ID was already used on another request."
+    elif duplicate_screenshot and screenshot_b64:
+        auto_rejected = True
+        reject_reason = "This payment screenshot was already used on another request."
+    elif payment_method and (not txn_id or len(txn_id.strip()) < 6):
+        auto_rejected = True
+        reject_reason = "A valid transaction / reference ID (at least 6 characters) is required."
+    elif payment_method and screenshot_b64 and not _is_valid_image(screenshot_b64):
+        auto_rejected = True
+        reject_reason = "The uploaded screenshot is not a valid image. Please upload a clear PNG or JPG."
+    elif ocr_available and txn_id.strip() and not ocr_txn_match and screenshot_b64:
+        auto_rejected = True
+        reject_reason = ("The transaction ID you entered does not appear in the payment screenshot. "
+                          "Double-check both and submit again.")
+
+    if auto_rejected:
+        status = "rejected"
+    # ---- Auto-approve → GRACE access only (never permanent) ----
+    # Requires ALL of: AUTO_APPROVE_MANUAL enabled, valid unique image+txn,
+    # OCR actually readable (if tesseract missing → admin queue, no blind
+    # approve — see _ocr_extract_text's deployment note), OCR finds the
+    # typed txn ID AND an amount within ±2% of PRO_PRICE_PKR in the image,
+    # and this device hasn't already had a grace auto-approval before.
+    elif (Config.AUTO_APPROVE_MANUAL and txn_id.strip() and _is_valid_image(screenshot_b64)
+            and not _device_already_auto_approved(ip_hash)
+            and ocr_available and ocr_txn_match and ocr_amount_match):
         license_key = create_new_key(grace_hours=Config.MANUAL_GRACE_HOURS)
         auto_approved = True
         status = "approved"
@@ -995,14 +1273,29 @@ def submit_pro_request(name, email, phone="", payment_method="", txn_id="", scre
         "status": status, "date": _now_str(), "key_assigned": license_key,
         "ip": ip_hash, "notified": False,
         "payment_method": payment_method, "txn_id": txn_id.strip(),
-        "has_screenshot": bool(screenshot_b64),
-        "auto_approved": auto_approved,
-        "grace_expires": (datetime.datetime.now() + datetime.timedelta(hours=Config.MANUAL_GRACE_HOURS)).strftime("%Y-%m-%d %H:%M") if auto_approved else ""
+        "has_screenshot": bool(screenshot_b64), "screenshot_sha256": screenshot_hash,
+        "auto_approved": auto_approved, "auto_rejected": auto_rejected, "reject_reason": reject_reason,
+        "grace_expires": (datetime.datetime.now() + datetime.timedelta(hours=Config.MANUAL_GRACE_HOURS)).strftime("%Y-%m-%d %H:%M") if auto_approved else "",
+        # HARDENING — see sweep_grace_reminders() below for the gap this
+        # closes: an auto-approved request's status is already "approved"
+        # immediately (it's just a temporary grace key, not permanent), and
+        # without this flag there was no way to tell "genuinely finalized"
+        # apart from "still just running on borrowed time" — so the admin
+        # dashboard's Approved tab treated both identically, with no button
+        # to ever finalize a grace approval to a permanent key.
+        "access_type": "grace" if auto_approved else "",
+        "grace_finalized": False,
+        "grace_reminder_sent": False,
+        "grace_expired_notified": False,
     }
+    if auto_rejected:
+        new_request["rejected_date"] = _now_str()
     requests_list.insert(0, new_request)
 
-    # Notify admin (always)
-    notified = _notify_admin(name, email, phone, req_id, payment_method, txn_id, screenshot_b64)
+    # Notify admin (skip for clear junk that was already auto-rejected — no
+    # need to alert admin about a duplicate/forged submission that never
+    # reaches the review queue)
+    notified = False if auto_rejected else _notify_admin(name, email, phone, req_id, payment_method, txn_id, screenshot_b64)
     new_request["notified"] = notified
 
     # If auto-approved, email key immediately
@@ -1013,6 +1306,7 @@ def submit_pro_request(name, email, phone="", payment_method="", txn_id="", scre
     return {
         "success": ok, "id": req_id, "notified": notified, 
         "error": err, "auto_approved": auto_approved, 
+        "auto_rejected": auto_rejected, "reject_reason": reject_reason,
         "license_key": license_key
     }
 
@@ -1025,6 +1319,13 @@ def approve_request(req_id, license_key):
             r["status"] = "approved"
             r["key_assigned"] = license_key
             r["approved_date"] = _now_str()
+            # If this was a grace auto-approval, this call IS the
+            # finalization to a permanent key — a no-op for a plain
+            # (non-grace) approval, which never sets access_type at all.
+            # See sweep_grace_reminders(): without this flag, a finalized
+            # grace request would keep getting reminder/lapsed emails
+            # forever since nothing would ever tell the sweep to stop.
+            r["grace_finalized"] = True
             user_email = r.get("email")
             user_name = r.get("name", "Pro User")
             break
@@ -1041,13 +1342,145 @@ def reject_request(req_id):
         if r["id"] == req_id:
             r["status"] = "rejected"
             r["rejected_date"] = _now_str()
+            # HARDENING: a plain pending reject never had a key issued, so
+            # there was nothing to revoke — reject_request only ever needed
+            # to flip status. But a grace auto-approval DOES already have a
+            # live, activated key by the time admin ever sees the request.
+            # Rejecting it here (fraud found on manual review) previously
+            # left that key fully working until it happened to hit
+            # grace_expires on its own — this cuts it off immediately.
+            key = r.get("key_assigned")
+            if key and r.get("access_type") == "grace":
+                keys = _get_license_keys()
+                if key in keys:
+                    keys[key]["revoked"] = True
+                    _save_license_keys(keys)
+                r["grace_finalized"] = True  # rejected is terminal too — stop reminder emails
             _save_requests(requests)
             return True
     return False
 
-# ──────────────────────────────────────────────────────────────────────
-# USAGE & LIMITS
-# ──────────────────────────────────────────────────────────────────────
+# How long before a grace-period auto-approval lapses to send admin a
+# heads-up that it still hasn't been converted to a permanent key.
+# Comfortably short of the default 72h MANUAL_GRACE_HOURS.
+GRACE_REMINDER_HOURS_BEFORE = 12
+
+
+def _notify_admin_grace_status(subject: str, text: str) -> bool:
+    """Minimal plain-text admin email for the grace-reminder sweep — reuses
+    the same Resend HTTPS API + config already used elsewhere in this file
+    (and already fixed to use the API instead of raw SMTP, see contact()),
+    without pulling in the full HTML template _notify_admin builds for a
+    brand new payment request."""
+    if not (Config.RESEND_API_KEY and Config.ADMIN_EMAIL):
+        return False
+    try:
+        r = req.post("https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {Config.RESEND_API_KEY}", "Content-Type": "application/json"},
+            json={"from": Config.CONTACT_FROM_EMAIL, "to": [Config.ADMIN_EMAIL],
+                  "subject": subject, "text": text}, timeout=15)
+        return r.status_code in (200, 201)
+    except Exception:
+        return False
+
+
+def sweep_grace_reminders() -> dict:
+    """HARDENING — this whole function is new. Closes the silent dead-end
+    in the auto-approval flow: once a manual payment is auto-approved,
+    submit_pro_request() immediately sets status="approved" with a
+    temporary GRACE key — but the admin dashboard's Approved tab rendered
+    a grace-approved row identically to a genuinely finalized one (just the
+    key text, a Delete button, nothing to act on), so it had NO way to
+    resurface for finalization. Left alone, the customer's temporary access
+    just expired at MANUAL_GRACE_HOURS with no reminder, no record anyone
+    missed it, and no admin action ever possible short of manually
+    cross-referencing raw request data against grace_expires.
+
+    Called from a background thread (see _start_grace_reminder_sweep_thread
+    below) — NOT tied to anyone opening /admin, which was exactly the
+    problem. Mirrors the same fix already shipped in VoxCraft's
+    pro_requests.sweep_grace_reminders():
+      1. GRACE_REMINDER_HOURS_BEFORE hours before grace_expires, if still
+         not grace_finalized, emails admin once (grace_reminder_sent flag
+         stops repeats).
+      2. If grace_expires has already passed and it's STILL not finalized,
+         emails a separate one-time "lapsed" alert — the safety net for a
+         reminder that got missed or never actioned.
+
+    Never touches the customer's actual access — check_license() already
+    cuts that off live via grace_expires regardless. This only guarantees a
+    human finds out before/around the moment it happens, instead of never.
+    """
+    reqs = _get_requests()
+    changed = False
+    now = datetime.datetime.now()
+    reminded, missed = 0, 0
+    for r in reqs:
+        if r.get("access_type") != "grace" or r.get("grace_finalized"):
+            continue
+        expires_raw = r.get("grace_expires", "")
+        if not expires_raw:
+            continue
+        try:
+            expires_at = datetime.datetime.strptime(expires_raw, "%Y-%m-%d %H:%M")
+        except (ValueError, TypeError):
+            continue
+        name, email, req_id = r.get("name", ""), r.get("email", ""), r.get("id", "")
+        if now >= expires_at:
+            if not r.get("grace_expired_notified"):
+                text = (f"QalamStudio — grace period LAPSED unreviewed\n\n"
+                        f"{name} <{email}> (request {req_id}) was auto-approved for temporary "
+                        f"Pro access, and that grace window has now passed without ever being "
+                        f"finalized to a permanent key — their access has silently cut off.\n\n"
+                        f"If the payment was genuine, approve them in the admin panel to restore access.\n")
+                _notify_admin_grace_status(f"🚨 Grace period lapsed unreviewed — {name}", text)
+                r["grace_expired_notified"] = True
+                changed = True
+                missed += 1
+        elif not r.get("grace_reminder_sent") and (expires_at - now) <= datetime.timedelta(hours=GRACE_REMINDER_HOURS_BEFORE):
+            hours_left = round((expires_at - now).total_seconds() / 3600.0, 1)
+            text = (f"QalamStudio — grace period expiring soon\n\n"
+                    f"{name} <{email}> was auto-approved for temporary Pro access "
+                    f"(request {req_id}) and hasn't been finalized to a permanent key yet. "
+                    f"Their grace access expires in about {hours_left} hour(s).\n\n"
+                    f"Review and finalize in the admin panel.\n")
+            _notify_admin_grace_status(f"⏳ Grace period expiring — {name} ({hours_left}h left)", text)
+            r["grace_reminder_sent"] = True
+            changed = True
+            reminded += 1
+    if changed:
+        _save_requests(reqs)
+    return {"reminded": reminded, "missed": missed}
+
+
+# Runs independently of anyone opening /admin — that page is exactly what
+# nobody was opening in time before this fix. Interval is short relative to
+# GRACE_REMINDER_HOURS_BEFORE (12h) and MANUAL_GRACE_HOURS (default 72h) so
+# a reminder/lapse notice never sits undetected for more than ~20 minutes
+# past when it should have fired.
+_grace_reminder_sweep_thread = None
+
+
+def _start_grace_reminder_sweep_thread():
+    global _grace_reminder_sweep_thread
+    if _grace_reminder_sweep_thread is not None and _grace_reminder_sweep_thread.is_alive():
+        return
+
+    def _sweep_loop():
+        while True:
+            time.sleep(1200)  # 20 minutes
+            try:
+                sweep_grace_reminders()
+            except Exception:
+                pass  # never let the sweeper thread itself crash the process
+
+    _grace_reminder_sweep_thread = threading.Thread(target=_sweep_loop, daemon=True)
+    _grace_reminder_sweep_thread.start()
+
+
+_start_grace_reminder_sweep_thread()
+
+
 def _get_identifier_daily_usage(identifier: str) -> int:
     """Persisted daily action count for one identifier ("ip:<hash>" or
     "fp:<hash>"). Reads through the normal 60s _gh_read cache — enforcement
@@ -1615,6 +2048,15 @@ def request_pro():
                 flash("Please upload your payment screenshot.", "error")
                 return render_template("request_pro.html", step=3, name=name, email=email, phone=phone)
             result = submit_pro_request(name, email, phone, payment_method, txn_id, screenshot_b64)
+            if result.get("auto_rejected"):
+                # HARDENING: previously there was no auto-reject path at
+                # all — a duplicate/forged submission would have shown the
+                # same "thanks, under review" page as a genuine one, then
+                # sat in admin's queue (and inbox) until manually rejected
+                # days later. Now the customer gets an immediate, specific,
+                # actionable reason instead.
+                flash(result.get("reject_reason") or "This request could not be processed.", "error")
+                return render_template("request_pro.html", step=3, name=name, email=email, phone=phone)
             if result["success"]:
                 # Auto-activate Pro on this device if key was auto-generated
                 if result.get("auto_approved") and result.get("license_key"):
@@ -1647,6 +2089,22 @@ def api_restore_pro():
             session["license_key"] = key
             session["pro_name"] = result.get("name", "Pro User")
             return jsonify({"success": True})
+        # HARDENING: this used to be a bare fall-through to "success: False"
+        # with the session left untouched. Combined with app.js only ever
+        # calling this endpoint when `!window.IS_PRO` (i.e. never again once
+        # a session already has is_pro=True), a key that was later revoked
+        # or expired had NO path to ever actually cut off an existing
+        # session — PERMANENT_SESSION_LIFETIME is 90 days, so that session
+        # cookie alone kept granting unlimited Pro access for up to 90 days
+        # after cancellation. Actively clearing the session here — combined
+        # with app.js now calling this on every load, not just when not
+        # already Pro — is what makes a revoked/expired key actually take
+        # effect during an existing session instead of only blocking a
+        # brand-new one.
+        session["is_pro"] = False
+        session["license_key"] = ""
+        session["pro_name"] = ""
+        return jsonify({"success": False, "error": result.get("error", "")})
     return jsonify({"success": False})
 
 @app.route("/api/activate-license", methods=["POST"])
@@ -2214,7 +2672,7 @@ def fs_callback():
         license_key, err = create_freemius_license(
             verify_result.get("user_name") or "Pro User",
             verify_result.get("user_email") or fs_email,
-            {"license_id": fs_license_id},
+            {"license_id": fs_license_id, "expiration": verify_result.get("expiration", "")},
         )
         if err:
             return render_template("fs_callback.html", error="not_verified",
@@ -2271,6 +2729,21 @@ def freemius_webhook():
         if not hmac.compare_digest(signature, expected):
             return jsonify({"error": "Invalid signature"}), 401
 
+    if event in ("license.extended", "license.cancelled", "license.expired"):
+        # HARDENING: these three events previously fell straight through to
+        # "Event ignored" below — nothing in this app ever handled a
+        # renewal, cancellation, or expiration after the first purchase.
+        # See sync_license_from_freemius_event's docstring for the real
+        # consequence: a cancelled/lapsed Pro subscriber's key never had an
+        # expiry to begin with, so it just kept granting Pro access
+        # forever, with continued billing or not making no difference at
+        # all to their access.
+        license_obj = (data.get("objects") or {}).get("license") or {}
+        freemius_license_id = str(license_obj.get("id", ""))
+        new_expiration = license_obj.get("expiration", "")
+        result = sync_license_from_freemius_event(freemius_license_id, event, new_expiration)
+        return jsonify(result), (200 if result.get("success") else 404)
+
     if event in ("payment.completed", "subscription.activated", "license.activated"):
         user = data.get("user", {})
         user_email = user.get("email", "")
@@ -2279,9 +2752,13 @@ def freemius_webhook():
 
         # Generate our own internal license key tied to this Freemius purchase
         objects = data.get("objects", {})
+        license_obj = objects.get("license") or {}
         freemius_meta = {
-            "license_id": (objects.get("license") or {}).get("id", ""),
+            "license_id": license_obj.get("id", ""),
             "subscription_id": (objects.get("subscription") or {}).get("id", ""),
+            # HARDENING: previously not captured at all — see
+            # create_freemius_license's note on why a real expiry matters.
+            "expiration": license_obj.get("expiration", ""),
         }
         license_key, error = create_freemius_license(user_name, user_email, freemius_meta)
 
@@ -2459,6 +2936,11 @@ def admin_dashboard():
     pending = [r for r in requests_list if r.get("status") == "pending"]
     approved = [r for r in requests_list if r.get("status") == "approved"]
     rejected = [r for r in requests_list if r.get("status") == "rejected"]
+    # Grace auto-approvals awaiting finalization — don't show up in `pending`
+    # above (their status is already "approved"), so without a separate
+    # count here they'd be invisible on the dashboard KPIs too, same blind
+    # spot sweep_grace_reminders() fixes for email.
+    pending_grace = sum(1 for r in approved if r.get("access_type") == "grace" and not r.get("grace_finalized"))
     posts = _get_blog_posts()
     # Recent lockouts/high-attempt IPs — most-recent-first, capped to the 10
     # most active offenders so this doesn't grow unbounded on the dashboard.
@@ -2470,7 +2952,7 @@ def admin_dashboard():
     return render_template("admin/dashboard.html",
         fresh=fresh, used=used, revoked=revoked,
         limits=limits, pending=pending, approved=approved,
-        rejected=rejected, posts=posts, keys=keys,
+        rejected=rejected, pending_grace=pending_grace, posts=posts, keys=keys,
         now=datetime.datetime.now(),
         login_attempts=login_attempts,
         gh_token_set=bool(Config.GITHUB_TOKEN),
