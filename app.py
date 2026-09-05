@@ -64,7 +64,7 @@ class Config:
     GH_REPO = os.environ.get("GH_REPO", "faisalchaudhary411/qalamstudio.xyz")
     GH_REPO_PUBLIC = os.environ.get("GH_REPO_PUBLIC", "faisalchaudhary411/qalamstudio-config")
     GH_BRANCH = "main"
-    RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+    MAILTRAP_API_KEY = os.environ.get("MAILTRAP_API_KEY", "")
     ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
     SMTP_HOST = os.environ.get("SMTP_HOST", "")
     SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
@@ -75,7 +75,9 @@ class Config:
     WHATSAPP_ADMIN_NUMBER = os.environ.get("WHATSAPP_ADMIN_NUMBER", "")
     WAPPFLY_API_KEY = os.environ.get("WAPPFLY_API_KEY", "")
     WAPPFLY_ADMIN_NUMBER = os.environ.get("WAPPFLY_ADMIN_NUMBER", "")
-    CONTACT_FROM_EMAIL = os.environ.get("CONTACT_FROM_EMAIL", "QalamStudio <onboarding@resend.dev>")
+    # Must be an address on a domain verified in Mailtrap's Sending Domain
+    # settings — unverified "from" addresses get rejected by the API.
+    CONTACT_FROM_EMAIL = os.environ.get("CONTACT_FROM_EMAIL", "QalamStudio <hello@qalamstudio.xyz>")
     FREE_DAILY_ACTIONS = int(os.environ.get("FREE_DAILY_ACTIONS", "20"))
     # Auto-approve manual Pakistani payments instantly (trust-based with grace period)
     AUTO_APPROVE_MANUAL = os.environ.get("AUTO_APPROVE_MANUAL", "true").lower() == "true"
@@ -896,8 +898,8 @@ QalamStudio Admin
     notified = False
     errors = []
 
-    # Resend
-    if Config.RESEND_API_KEY and Config.ADMIN_EMAIL:
+    # Mailtrap
+    if Config.MAILTRAP_API_KEY and Config.ADMIN_EMAIL:
         try:
             pay_badge = payment_method if payment_method else "Not provided"
             txn_row = f"<tr><td style=\'padding:6px 0;color:#888;font-size:13px\'>Transaction ID</td><td style=\'padding:6px 0;color:#fff;font-size:13px;font-weight:700\'>{txn_id}</td></tr>" if txn_id else ""
@@ -921,9 +923,10 @@ QalamStudio Admin
     <a href="https://app.qalamstudio.xyz/admin" style="display:block;background:linear-gradient(135deg,#00c896,#3b82f6);color:#000;text-align:center;padding:12px;border-radius:10px;text-decoration:none;font-weight:800;font-size:14px;margin-bottom:16px">→ Open Admin Panel to Approve</a>
   </div>
 </body></html>"""
+            from_name, from_email = _parse_from_address(Config.CONTACT_FROM_EMAIL)
             email_payload = {
-                "from": "QalamStudio <onboarding@resend.dev>",
-                "to": [Config.ADMIN_EMAIL],
+                "from": {"email": from_email, "name": from_name} if from_name else {"email": from_email},
+                "to": [{"email": Config.ADMIN_EMAIL}],
                 "subject": f"💳 New Pro Payment — {name}",
                 "html": admin_html,
                 "text": message_body
@@ -932,15 +935,15 @@ QalamStudio Admin
                 email_payload["attachments"] = [{
                     "filename": "payment_proof.jpg",
                     "content": screenshot_b64,
-                    "content_type": "image/jpeg"
+                    "type": "image/jpeg"
                 }]
-            r = req.post("https://api.resend.com/emails",
-                headers={"Authorization": f"Bearer {Config.RESEND_API_KEY}", "Content-Type": "application/json"},
+            r = req.post("https://send.api.mailtrap.io/api/send",
+                headers={"Api-Token": Config.MAILTRAP_API_KEY, "Content-Type": "application/json"},
                 json=email_payload, timeout=20)
-            if r.status_code in (200, 201):
+            if r.status_code == 200:
                 notified = True
             else:
-                errors.append(f"Resend: {r.status_code}")
+                errors.append(f"Mailtrap: {r.status_code}")
             # User confirmation
             if email and notified:
                 user_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"></head>
@@ -960,14 +963,15 @@ QalamStudio Admin
   </div>
 </div></body></html>"""
                 try:
-                    req.post("https://api.resend.com/emails",
-                        headers={"Authorization": f"Bearer {Config.RESEND_API_KEY}", "Content-Type": "application/json"},
-                        json={"from": "QalamStudio <onboarding@resend.dev>", "to": [email],
+                    req.post("https://send.api.mailtrap.io/api/send",
+                        headers={"Api-Token": Config.MAILTRAP_API_KEY, "Content-Type": "application/json"},
+                        json={"from": {"email": from_email, "name": from_name} if from_name else {"email": from_email},
+                              "to": [{"email": email}],
                               "subject": "✅ Payment Received — QalamStudio Pro", "html": user_html}, timeout=15)
                 except Exception:
                     pass
         except Exception as e:
-            errors.append(f"Resend: {e}")
+            errors.append(f"Mailtrap: {e}")
 
     # SMTP fallback
     if not notified and Config.SMTP_HOST and Config.SMTP_USER and Config.SMTP_PASS and Config.ADMIN_EMAIL:
@@ -1017,7 +1021,7 @@ QalamStudio Admin
     return notified
 
 def _send_key_email(user_email, user_name, license_key):
-    if not Config.RESEND_API_KEY or not user_email:
+    if not Config.MAILTRAP_API_KEY or not user_email:
         return False
     try:
         html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"></head>
@@ -1036,11 +1040,13 @@ def _send_key_email(user_email, user_name, license_key):
     </div>
   </div>
 </div></body></html>"""
-        r = req.post("https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {Config.RESEND_API_KEY}", "Content-Type": "application/json"},
-            json={"from": "QalamStudio <onboarding@resend.dev>", "to": [user_email],
+        from_name, from_email = _parse_from_address(Config.CONTACT_FROM_EMAIL)
+        r = req.post("https://send.api.mailtrap.io/api/send",
+            headers={"Api-Token": Config.MAILTRAP_API_KEY, "Content-Type": "application/json"},
+            json={"from": {"email": from_email, "name": from_name} if from_name else {"email": from_email},
+                  "to": [{"email": user_email}],
                   "subject": "🎉 Your QalamStudio Pro License Key", "html": html}, timeout=15)
-        return r.status_code in (200, 201)
+        return r.status_code == 200
     except Exception:
         return False
 
@@ -1368,18 +1374,20 @@ GRACE_REMINDER_HOURS_BEFORE = 12
 
 def _notify_admin_grace_status(subject: str, text: str) -> bool:
     """Minimal plain-text admin email for the grace-reminder sweep — reuses
-    the same Resend HTTPS API + config already used elsewhere in this file
+    the same Mailtrap HTTPS API + config already used elsewhere in this file
     (and already fixed to use the API instead of raw SMTP, see contact()),
     without pulling in the full HTML template _notify_admin builds for a
     brand new payment request."""
-    if not (Config.RESEND_API_KEY and Config.ADMIN_EMAIL):
+    if not (Config.MAILTRAP_API_KEY and Config.ADMIN_EMAIL):
         return False
     try:
-        r = req.post("https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {Config.RESEND_API_KEY}", "Content-Type": "application/json"},
-            json={"from": Config.CONTACT_FROM_EMAIL, "to": [Config.ADMIN_EMAIL],
+        from_name, from_email = _parse_from_address(Config.CONTACT_FROM_EMAIL)
+        r = req.post("https://send.api.mailtrap.io/api/send",
+            headers={"Api-Token": Config.MAILTRAP_API_KEY, "Content-Type": "application/json"},
+            json={"from": {"email": from_email, "name": from_name} if from_name else {"email": from_email},
+                  "to": [{"email": Config.ADMIN_EMAIL}],
                   "subject": subject, "text": text}, timeout=15)
-        return r.status_code in (200, 201)
+        return r.status_code == 200
     except Exception:
         return False
 
@@ -1901,37 +1909,51 @@ def about():
     return render_template("about.html")
 
 # ──────────────────────────────────────────────────────────────────────
-# CONTACT INQUIRIES — Resend SMTP primary, Wappfly admin fallback
+# CONTACT INQUIRIES — Mailtrap API primary, Wappfly admin fallback
 # ──────────────────────────────────────────────────────────────────────
-def _send_resend_smtp(to_email, subject, text_body, reply_to=None):
-    """Send via Resend's HTTPS API (not raw SMTP — Render blocks outbound SMTP ports 25/465/587)."""
-    if not Config.RESEND_API_KEY:
-        app.logger.error("Resend send skipped: RESEND_API_KEY is not set")
+def _parse_from_address(raw):
+    """Parses a 'Name <email@domain>' string (or a bare email) into
+    (name, email) for Mailtrap's {"email": ..., "name": ...} address objects."""
+    raw = (raw or "").strip()
+    m = re.match(r'^(.*)<(.+)>$', raw)
+    if m:
+        name = m.group(1).strip().strip('"')
+        return (name or None), m.group(2).strip()
+    return None, raw
+
+def _send_mailtrap_email(to_email, subject, text_body=None, html_body=None, reply_to=None):
+    """Send via Mailtrap's Email Sending API (Render blocks outbound SMTP ports 25/465/587)."""
+    if not Config.MAILTRAP_API_KEY:
+        app.logger.error("Mailtrap send skipped: MAILTRAP_API_KEY is not set")
         return False
     if not to_email:
-        app.logger.error("Resend send skipped: no recipient email provided")
+        app.logger.error("Mailtrap send skipped: no recipient email provided")
         return False
     try:
+        from_name, from_email = _parse_from_address(Config.CONTACT_FROM_EMAIL)
         payload = {
-            "from": Config.CONTACT_FROM_EMAIL,
-            "to": [to_email],
+            "from": {"email": from_email, "name": from_name} if from_name else {"email": from_email},
+            "to": [{"email": to_email}],
             "subject": subject,
-            "text": text_body,
         }
+        if text_body:
+            payload["text"] = text_body
+        if html_body:
+            payload["html"] = html_body
         if reply_to:
-            payload["reply_to"] = reply_to
+            payload["reply_to"] = {"email": reply_to}
         r = req.post(
-            "https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {Config.RESEND_API_KEY}", "Content-Type": "application/json"},
+            "https://send.api.mailtrap.io/api/send",
+            headers={"Api-Token": Config.MAILTRAP_API_KEY, "Content-Type": "application/json"},
             json=payload, timeout=20,
         )
-        if r.status_code in (200, 201):
-            app.logger.info("Resend API: sent to %s from %s", to_email, Config.CONTACT_FROM_EMAIL)
+        if r.status_code == 200:
+            app.logger.info("Mailtrap API: sent to %s from %s", to_email, Config.CONTACT_FROM_EMAIL)
             return True
-        app.logger.error("Resend API failed (%s): from=%r to=%r body=%s", r.status_code, Config.CONTACT_FROM_EMAIL, to_email, r.text[:500])
+        app.logger.error("Mailtrap API failed (%s): from=%r to=%r body=%s", r.status_code, Config.CONTACT_FROM_EMAIL, to_email, r.text[:500])
         return False
     except Exception as exc:
-        app.logger.error("Resend API request failed (from=%r to=%r): %s", Config.CONTACT_FROM_EMAIL, to_email, exc, exc_info=True)
+        app.logger.error("Mailtrap API request failed (from=%r to=%r): %s", Config.CONTACT_FROM_EMAIL, to_email, exc, exc_info=True)
         return False
 
 def _contact_auto_reply(category, name):
@@ -1951,10 +1973,10 @@ def _notify_contact_inquiry(name, email, category, message, phone=""):
     safe_message = html.escape(message)
     admin_text = f"""New QalamStudio Contact Inquiry\n\nName: {name}\nEmail: {email}\nPhone: {phone or 'Not provided'}\nCategory: {category.title()}\n\nMessage:\n{message}\n"""
     notified = False
-    # Primary: Resend SMTP. Reply-To lets you answer the visitor directly.
+    # Primary: Mailtrap API. Reply-To lets you answer the visitor directly.
     if Config.ADMIN_EMAIL:
-        notified = _send_resend_smtp(
-            Config.ADMIN_EMAIL, f"New {category.title()} inquiry — {name}", admin_text, reply_to=email
+        notified = _send_mailtrap_email(
+            Config.ADMIN_EMAIL, f"New {category.title()} inquiry — {name}", text_body=admin_text, reply_to=email
         )
     # Fallback: Wappfly WhatsApp notification to the admin.
     if not notified and Config.WAPPFLY_API_KEY and Config.WAPPFLY_ADMIN_NUMBER:
@@ -1998,9 +2020,9 @@ def contact():
         admin_notified = _notify_contact_inquiry(name, email, category, message, phone)
         # Automated acknowledgement for common inquiry types.
         subject, reply = _contact_auto_reply(category, name)
-        _send_resend_smtp(email, subject, reply)
+        _send_mailtrap_email(email, subject, text_body=reply)
         if not admin_notified:
-            app.logger.error("CONTACT FORM: admin notification failed for inquiry from %s <%s>. Check RESEND_API_KEY / CONTACT_FROM_EMAIL / ADMIN_EMAIL and Resend domain verification. Full message logged above this line.", name, email)
+            app.logger.error("CONTACT FORM: admin notification failed for inquiry from %s <%s>. Check MAILTRAP_API_KEY / CONTACT_FROM_EMAIL / ADMIN_EMAIL and Mailtrap domain verification. Full message logged above this line.", name, email)
         flash("Thanks — your message has been received. We’ll get back to you soon.", "success")
         return redirect(url_for("contact"))
 
@@ -2959,7 +2981,7 @@ def admin_dashboard():
         groq_set=bool(Config.GROQ_API_KEY),
         cerebras_set=bool(Config.CEREBRAS_API_KEY),
         openrouter_set=bool(Config.OPENROUTER_API_KEY),
-        resend_set=bool(Config.RESEND_API_KEY),
+        mailtrap_set=bool(Config.MAILTRAP_API_KEY),
         smtp_set=bool(Config.SMTP_HOST and Config.SMTP_USER and Config.SMTP_PASS),
         wa_set=bool(Config.WHATSAPP_API_TOKEN and Config.WHATSAPP_PHONE_NUMBER_ID),
         wapp_set=bool(Config.WAPPFLY_API_KEY))
@@ -3145,15 +3167,17 @@ def admin_toggle_blog():
 @app.route("/admin/api/test-email", methods=["POST"])
 @admin_required
 def admin_test_email():
-    if not Config.RESEND_API_KEY or not Config.ADMIN_EMAIL:
-        return jsonify({"success": False, "error": "Resend not configured"})
+    if not Config.MAILTRAP_API_KEY or not Config.ADMIN_EMAIL:
+        return jsonify({"success": False, "error": "Mailtrap not configured"})
     try:
-        r = req.post("https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {Config.RESEND_API_KEY}", "Content-Type": "application/json"},
-            json={"from": "QalamStudio <onboarding@resend.dev>", "to": [Config.ADMIN_EMAIL],
+        from_name, from_email = _parse_from_address(Config.CONTACT_FROM_EMAIL)
+        r = req.post("https://send.api.mailtrap.io/api/send",
+            headers={"Api-Token": Config.MAILTRAP_API_KEY, "Content-Type": "application/json"},
+            json={"from": {"email": from_email, "name": from_name} if from_name else {"email": from_email},
+                  "to": [{"email": Config.ADMIN_EMAIL}],
                   "subject": "✅ QalamStudio Test Email",
                   "text": "This is a test notification from QalamStudio admin panel."}, timeout=15)
-        if r.status_code in (200, 201):
+        if r.status_code == 200:
             return jsonify({"success": True})
         return jsonify({"success": False, "error": f"{r.status_code}: {r.text[:200]}"})
     except Exception as e:
