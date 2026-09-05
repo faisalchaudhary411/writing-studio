@@ -161,6 +161,26 @@ def _csrf_protect():
 _cache = {}
 _cache_ttl = 60
 
+
+# ── Contact form anti-spam (in-memory; resets on restart / new worker) ──
+# Limits how many contact submissions one IP can make. Enough for real
+# users, blocks bulk bots that rotate emails but reuse the same proxy/IP.
+_CONTACT_RATE = {}  # ip_hash -> list of unix timestamps
+_CONTACT_RATE_LOCK = threading.Lock()
+CONTACT_RATE_MAX = 5          # max submissions
+CONTACT_RATE_WINDOW_SEC = 3600  # per hour
+CONTACT_MIN_FILL_SEC = 3      # form must be open at least this long
+CONTACT_MAX_FILL_SEC = 7200   # and not older than 2 hours (stale/replay)
+
+# Common disposable / throwaway email domains — block these at the contact form.
+_DISPOSABLE_EMAIL_DOMAINS = {
+    "mailinator.com", "guerrillamail.com", "guerrillamail.net", "sharklasers.com",
+    "tempmail.com", "temp-mail.org", "throwaway.email", "yopmail.com",
+    "trashmail.com", "10minutemail.com", "getnada.com", "maildrop.cc",
+    "dispostable.com", "mailnesia.com", "tempail.com", "fakeinbox.com",
+    "emailondeck.com", "mohmal.com", "tmpmail.org", "tmpmail.net",
+}
+
 # ──────────────────────────────────────────────────────────────────────
 # GITHUB PERSISTENCE
 # ──────────────────────────────────────────────────────────────────────
@@ -1965,6 +1985,68 @@ def _contact_auto_reply(category, name):
     }
     return replies.get(category, ("We received your message", f"Hi {name},\n\nThanks for contacting QalamStudio. We received your message and will get back to you as soon as possible.\n\n— QalamStudio"))
 
+
+def _contact_rate_limited(ip_hash: str) -> bool:
+    """True if this IP has already hit the contact form too many times recently."""
+    if not ip_hash:
+        return False
+    now = time.time()
+    cutoff = now - CONTACT_RATE_WINDOW_SEC
+    with _CONTACT_RATE_LOCK:
+        stamps = [t for t in _CONTACT_RATE.get(ip_hash, []) if t >= cutoff]
+        _CONTACT_RATE[ip_hash] = stamps
+        return len(stamps) >= CONTACT_RATE_MAX
+
+
+def _contact_rate_record(ip_hash: str) -> None:
+    if not ip_hash:
+        return
+    now = time.time()
+    cutoff = now - CONTACT_RATE_WINDOW_SEC
+    with _CONTACT_RATE_LOCK:
+        stamps = [t for t in _CONTACT_RATE.get(ip_hash, []) if t >= cutoff]
+        stamps.append(now)
+        _CONTACT_RATE[ip_hash] = stamps
+
+
+def _is_disposable_email(email: str) -> bool:
+    try:
+        domain = email.rsplit("@", 1)[-1].lower().strip()
+    except Exception:
+        return False
+    return domain in _DISPOSABLE_EMAIL_DOMAINS
+
+
+def _make_contact_token() -> str:
+    """Signed timestamp so bots cannot easily forge a valid form age."""
+    ts = str(int(time.time()))
+    sig = hmac.new(
+        app.config["SECRET_KEY"].encode(),
+        ts.encode(),
+        hashlib.sha256,
+    ).hexdigest()[:16]
+    return f"{ts}.{sig}"
+
+
+def _contact_token_ok(token: str) -> bool:
+    if not token or "." not in token:
+        return False
+    ts_str, sig = token.rsplit(".", 1)
+    try:
+        ts = int(ts_str)
+    except ValueError:
+        return False
+    expected = hmac.new(
+        app.config["SECRET_KEY"].encode(),
+        ts_str.encode(),
+        hashlib.sha256,
+    ).hexdigest()[:16]
+    if not hmac.compare_digest(sig, expected):
+        return False
+    age = time.time() - ts
+    return CONTACT_MIN_FILL_SEC <= age <= CONTACT_MAX_FILL_SEC
+
+
 def _notify_contact_inquiry(name, email, category, message, phone=""):
     safe_name = html.escape(name)
     safe_email = html.escape(email)
@@ -1997,9 +2079,26 @@ def _notify_contact_inquiry(name, email, category, message, phone=""):
 @app.route("/contact", methods=["GET", "POST"])
 def contact():
     if request.method == "POST":
-        # Honeypot: bots often fill fields hidden from real visitors.
-        if request.form.get("website", "").strip():
+        ip_hash = _hash_ip(_get_user_ip())
+
+        # 1) Honeypot — bots often fill fields hidden from real visitors.
+        # Silent success so the bot thinks it worked and does not retry harder.
+        if request.form.get("website", "").strip() or request.form.get("company_url", "").strip():
+            app.logger.info("CONTACT honeypot tripped ip=%s", ip_hash)
+            flash("Thanks — your message has been received. We’ll get back to you soon.", "success")
             return redirect(url_for("contact"))
+
+        # 2) Rate limit by IP (stops bulk spam even when email addresses change).
+        if _contact_rate_limited(ip_hash):
+            app.logger.warning("CONTACT rate-limited ip=%s", ip_hash)
+            flash("Too many messages from your network. Please try again in an hour.", "error")
+            return render_template("contact.html", contact_token=_make_contact_token())
+
+        # 3) Timing / signed token — form must have been loaded a few seconds ago.
+        if not _contact_token_ok(request.form.get("contact_token", "")):
+            app.logger.info("CONTACT bad/missing token ip=%s", ip_hash)
+            flash("Please reload the page and try again.", "error")
+            return render_template("contact.html", contact_token=_make_contact_token())
 
         name = request.form.get("name", "").strip()[:100]
         email = request.form.get("email", "").strip()[:254]
@@ -2012,10 +2111,16 @@ def contact():
             category = "general"
         if not name or not email or "@" not in email or "." not in email.rsplit("@", 1)[-1]:
             flash("Please enter your name and a valid email address.", "error")
-            return render_template("contact.html")
+            return render_template("contact.html", contact_token=_make_contact_token())
+        if _is_disposable_email(email):
+            flash("Please use a permanent email address (temporary / disposable addresses are not accepted).", "error")
+            return render_template("contact.html", contact_token=_make_contact_token())
         if len(message) < 10:
             flash("Please write a little more detail so we can help you.", "error")
-            return render_template("contact.html")
+            return render_template("contact.html", contact_token=_make_contact_token())
+
+        # Record attempt only after basic validation passed (still counts toward limit).
+        _contact_rate_record(ip_hash)
 
         admin_notified = _notify_contact_inquiry(name, email, category, message, phone)
         # Automated acknowledgement for common inquiry types.
@@ -2026,7 +2131,7 @@ def contact():
         flash("Thanks — your message has been received. We’ll get back to you soon.", "success")
         return redirect(url_for("contact"))
 
-    return render_template("contact.html")
+    return render_template("contact.html", contact_token=_make_contact_token())
 
 @app.route("/privacy")
 def privacy():
