@@ -88,7 +88,7 @@ def test_submit_pro_request_rate_limited_returns_error(monkeypatch):
 
 def test_submit_pro_request_auto_rejects_duplicate_txn_without_notifying_admin(monkeypatch):
     monkeypatch.setattr(qalam_app, "_is_valid_image", lambda b64: True)
-    monkeypatch.setattr(qalam_app.Config, "RESEND_API_KEY", "fake-key")
+    monkeypatch.setattr(qalam_app.Config, "MAILTRAP_API_KEY", "fake-key")
     monkeypatch.setattr(qalam_app.Config, "ADMIN_EMAIL", "admin@example.com")
     notify_calls = []
     monkeypatch.setattr(qalam_app, "_notify_admin", lambda *a, **k: notify_calls.append(1) or True)
@@ -324,13 +324,13 @@ def test_grace_sweep_ignores_requests_without_grace_expires():
 
 
 def test_notify_admin_grace_status_noop_without_config():
-    # RESEND_API_KEY/ADMIN_EMAIL are unset by default in conftest — this
+    # MAILTRAP_API_KEY/ADMIN_EMAIL are unset by default in conftest — this
     # must fail closed (no exception, no network call) rather than error.
     assert qalam_app._notify_admin_grace_status("subject", "body") is False
 
 
 def test_notify_admin_grace_status_sends_when_configured(monkeypatch):
-    monkeypatch.setattr(qalam_app.Config, "RESEND_API_KEY", "fake-resend-key")
+    monkeypatch.setattr(qalam_app.Config, "MAILTRAP_API_KEY", "fake-mailtrap-key")
     monkeypatch.setattr(qalam_app.Config, "ADMIN_EMAIL", "admin@example.com")
 
     class FakeResponse:
@@ -346,5 +346,5 @@ def test_notify_admin_grace_status_sends_when_configured(monkeypatch):
     monkeypatch.setattr(qalam_app.req, "post", fake_post)
     ok = qalam_app._notify_admin_grace_status("Test subject", "Test body")
     assert ok is True
-    assert captured["json"]["to"] == ["admin@example.com"]
+    assert captured["json"]["to"] == [{"email": "admin@example.com"}]
     assert captured["json"]["subject"] == "Test subject"

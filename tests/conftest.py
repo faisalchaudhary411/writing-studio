@@ -20,7 +20,7 @@ import copy
 # (and raises RuntimeError if missing) at module import time.
 os.environ.setdefault("QALAM_ALLOW_DEV_SECRET", "1")
 os.environ.setdefault("GITHUB_TOKEN", "")       # keep persistence calls fake-only
-os.environ.setdefault("RESEND_API_KEY", "")     # keep email sends fake-only by default
+os.environ.setdefault("MAILTRAP_API_KEY", "")   # keep email sends fake-only by default
 os.environ.setdefault("ADMIN_EMAIL", "")
 os.environ.setdefault("ADMIN_PASSWORD", "test-admin-password-not-used-in-prod")
 
