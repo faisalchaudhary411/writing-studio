@@ -20,7 +20,7 @@ services:
         sync: false
       - key: GH_REPO_PUBLIC
         sync: false
-      - key: RESEND_API_KEY
+      - key: MAILTRAP_API_KEY
         sync: false
       - key: ADMIN_EMAIL
         sync: false
