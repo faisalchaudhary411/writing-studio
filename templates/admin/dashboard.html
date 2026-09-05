@@ -72,7 +72,7 @@
       <h3 style="font-family:var(--font-display);font-weight:600;color:var(--text-primary);font-size:1rem;margin-bottom:1rem">🔗 GitHub Sync</h3>
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem">
         <span class="status-badge {{ 'status-approved' if gh_token_set else 'status-rejected' }}">GitHub {{ '✓' if gh_token_set else '✗' }}</span>
-        <span class="status-badge {{ 'status-approved' if resend_set else 'status-rejected' }}">Resend {{ '✓' if resend_set else '✗' }}</span>
+        <span class="status-badge {{ 'status-approved' if mailtrap_set else 'status-rejected' }}">Mailtrap {{ '✓' if mailtrap_set else '✗' }}</span>
         <span class="status-badge {{ 'status-approved' if smtp_set else 'status-rejected' }}">SMTP {{ '✓' if smtp_set else '✗' }}</span>
         <span class="status-badge {{ 'status-approved' if wa_set else 'status-rejected' }}">WhatsApp {{ '✓' if wa_set else '✗' }}</span>
         <span class="status-badge {{ 'status-approved' if wapp_set else 'status-rejected' }}">Wappfly {{ '✓' if wapp_set else '✗' }}</span>
