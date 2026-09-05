@@ -27,6 +27,7 @@
     </div>
 
     <form class="contact-form glass-panel" method="POST" action="{{ url_for('contact') }}">
+      <input type="hidden" name="contact_token" value="{{ contact_token }}">
       <div class="contact-form-head">
         <span class="contact-form-mark">✦</span>
         <div><h2>Send a message</h2><p>Tell us what you need.</p></div>
@@ -68,6 +69,8 @@
       <div class="contact-hp" aria-hidden="true">
         <label for="website">Website</label>
         <input id="website" name="website" type="text" tabindex="-1" autocomplete="off">
+        <label for="company_url">Company URL</label>
+        <input id="company_url" name="company_url" type="text" tabindex="-1" autocomplete="off">
       </div>
 
       <button type="submit" class="btn btn-primary contact-submit">Send message <span>→</span></button>
