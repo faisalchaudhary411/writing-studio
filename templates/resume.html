@@ -62,34 +62,50 @@
       </div>
 
       <div class="form-group">
+        <label class="form-label">Resume Template</label>
+        <select class="form-select" id="cv-template">
+          <option value="modern">Modern (dark header, best for creative/design roles)</option>
+          <option value="traditional">Traditional / ATS-Safe (plain, best for corporate & job-portal applications)</option>
+        </select>
+      </div>
+
+      <div class="form-group">
         <label class="form-label">Summary / About you (optional — leave blank to auto-generate)</label>
-        <textarea class="form-textarea" id="cv-summary" rows="2" placeholder="Short intro about yourself..."></textarea>
+        <textarea class="form-textarea" id="cv-summary" rows="2" placeholder="Short intro about yourself..." maxlength="600"></textarea>
       </div>
 
       <div class="form-group">
         <label class="form-label">Work Experience</label>
-        <textarea class="form-textarea" id="cv-experience" rows="4" placeholder="Company | Role | Years | Key achievements&#10;e.g. Fiverr | Logo Designer | 2021-Present | 200+ projects, 5-star rating"></textarea>
+        <textarea class="form-textarea" id="cv-experience" rows="4" placeholder="Company | Role | Years | Key achievements&#10;e.g. Fiverr | Logo Designer | 2021-Present | 200+ projects, 5-star rating" maxlength="4000"></textarea>
       </div>
 
       <div class="form-group">
         <label class="form-label">Education</label>
-        <textarea class="form-textarea" id="cv-education" rows="2" placeholder="Degree | Institute | Year&#10;e.g. BS Computer Science | Punjab University | 2020"></textarea>
+        <textarea class="form-textarea" id="cv-education" rows="2" placeholder="Degree | Institute | Year&#10;e.g. BS Computer Science | Punjab University | 2020" maxlength="800"></textarea>
       </div>
 
       <div class="form-group">
         <label class="form-label">Skills (comma-separated)</label>
-        <input type="text" class="form-input" id="cv-skills" placeholder="Photoshop, Illustrator, Client Communication, Urdu Typing">
+        <input type="text" class="form-input" id="cv-skills" placeholder="Photoshop, Illustrator, Client Communication, Urdu Typing" maxlength="500">
       </div>
 
       <div class="form-group">
         <label class="form-label">Extra (certifications, languages, links — optional)</label>
-        <textarea class="form-textarea" id="cv-extra" rows="2" placeholder="Google Ads Certificate, Fluent English & Urdu, portfolio: ..."></textarea>
+        <textarea class="form-textarea" id="cv-extra" rows="2" placeholder="Google Ads Certificate, Fluent English & Urdu, portfolio: ..." maxlength="500"></textarea>
       </div>
 
       <button class="btn btn-primary" id="generate-cv-btn" style="width:100%">📄 Generate Resume</button>
 
+      <!-- Styled, printable resume — this is what "Download PDF" prints -->
+      <div id="cv-resume-preview" class="resume-preview" style="display:none"></div>
+
+      <!-- Plain-text fallback (shown only if the styled template can't be built from a given result) -->
       <div id="cv-output" class="output-box ltr" style="display:none"></div>
-      <button class="btn btn-secondary" id="download-cv-btn" data-download="#cv-output" data-filename="qalam_resume.txt" style="width:100%;margin-top:0.75rem;display:none">📥 Download Resume</button>
+
+      <div id="cv-actions" style="display:none;gap:0.75rem;margin-top:0.75rem;flex-wrap:wrap">
+        <button class="btn btn-primary" id="download-cv-pdf-btn" style="flex:1;min-width:180px;display:none">🖨️ Download as PDF</button>
+        <button class="btn btn-secondary" id="download-cv-btn" data-download="#cv-output" data-filename="qalam_resume.txt" style="flex:1;min-width:180px">📥 Download as TXT</button>
+      </div>
     </div>
   </div>
 </section>
@@ -104,7 +120,7 @@
 {% set faqs = [
   {"q": "Can I get a bilingual Urdu–English CV?", "a": "Yes — choose Bilingual (Urdu + English) as the language option."},
   {"q": "Will it invent experience?", "a": "No. It only strengthens wording from the experience, education and skills you enter."},
-  {"q": "Is the output a PDF?", "a": "You get polished plain text you can paste into Google Docs, Word, or a PDF template and format."},
+  {"q": "Is the output a PDF?", "a": "Yes — pick a Modern or Traditional/ATS-Safe template and use \"Download as PDF\". A plain-text copy is also available for pasting into Google Docs or Word."},
   {"q": "Who is this for?", "a": "Freelancers, fresh graduates, and job seekers applying in Pakistan or on global marketplaces. Pair with <a href=\"" ~ url_for('freelancer') ~ "\">proposals</a> when pitching clients."}
 ] %}
 {% include "partials/faq.html" %}

@@ -22,6 +22,13 @@
       {% endif %}
     </div>
 
+    <div class="glass-panel" style="max-width: 800px; margin: 0 auto 1.25rem; padding: 1rem 1.25rem; font-size: 0.88rem; line-height: 1.65;">
+      <strong>How to actually use this:</strong> generate your replies below, then paste each one into
+      <strong>WhatsApp Business app → Settings → Business Tools</strong> → the matching feature
+      (Greeting Message, Away Message, or a saved Quick Reply). Once it's saved there, WhatsApp sends it
+      automatically from then on — you only paste it once, not every time you chat.
+    </div>
+
     <div class="glass-panel" style="max-width: 800px; margin: 0 auto;">
       <div class="grid-2">
         <div class="form-group">
@@ -72,13 +79,14 @@
 
       <div class="form-group">
         <label class="form-label">Extra details (products, hours, location, tone…)</label>
-        <textarea class="form-textarea" id="wa-details" rows="4" placeholder="مثال: ہم 10 بجے سے 10 بجے تک کھلے ہیں۔ Delivery لاہور میں free ہے۔ Price list بھجو..."></textarea>
+        <textarea class="form-textarea" id="wa-details" rows="4" placeholder="مثال: ہم 10 بجے سے 10 بجے تک کھلے ہیں۔ Delivery لاہور میں free ہے۔ Price list بھجو..." maxlength="1000"></textarea>
       </div>
 
       <button class="btn btn-primary" id="generate-wa-btn" style="width:100%">💬 Generate WhatsApp Replies</button>
 
+      <div id="wa-blocks" class="wa-blocks" style="display:none"></div>
       <div id="wa-output" class="output-box ltr" style="display:none"></div>
-      <button class="btn btn-secondary" id="download-wa-btn" data-download="#wa-output" data-filename="qalam_whatsapp_replies.txt" style="width:100%;margin-top:0.75rem;display:none">📥 Download</button>
+      <button class="btn btn-secondary" id="download-wa-btn" data-download="#wa-output" data-filename="qalam_whatsapp_replies.txt" style="width:100%;margin-top:0.75rem;display:none">📥 Download All</button>
     </div>
   </div>
 </section>
@@ -93,7 +101,7 @@
 {% set faqs = [
   {"q": "Can I get a full set of replies at once?", "a": "Yes — choose “Full set (welcome + away + price + order)” under scenarios."},
   {"q": "Is Roman Urdu supported?", "a": "Roman Urdu is the default because that is how most shop owners type. Pure Urdu and English are available too."},
-  {"q": "Will this connect to my WhatsApp Business API?", "a": "No. It generates text you copy into WhatsApp Business app quick replies or your own automation tool."},
+  {"q": "Will this connect to my WhatsApp Business API?", "a": "No. Each reply has its own \"Copy\" button — copy it into WhatsApp Business app's Greeting Message, Away Message, or a saved Quick Reply, one time. WhatsApp then sends it automatically after that."},
   {"q": "What about freelancer client chats?", "a": "Pick Freelancer / Service provider as the business type, or use the <a href=\"" ~ url_for('freelancer') ~ "\">Freelancer Toolkit</a> for formal emails."}
 ] %}
 {% include "partials/faq.html" %}
