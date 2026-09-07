@@ -507,6 +507,103 @@ body {
   font-family: var(--font-body);
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   WHATSAPP REPLIES — one card + copy button per generated message
+   ══════════════════════════════════════════════════════════════════════ */
+.wa-blocks { display: grid; gap: 0.85rem; margin-top: 1.5rem; }
+.wa-block {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.1rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.wa-block-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.92rem;
+  line-height: 1.7;
+  flex: 1;
+}
+.wa-block.urdu .wa-block-text { direction: rtl; text-align: right; font-family: var(--font-urdu); line-height: 2.2; }
+.wa-block.ltr .wa-block-text { direction: ltr; text-align: left; }
+.wa-block-copy { flex-shrink: 0; white-space: nowrap; }
+@media (max-width: 560px) {
+  .wa-block { flex-direction: column; }
+  .wa-block-copy { align-self: flex-end; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   RESUME BUILDER — styled preview + browser print-to-PDF templates
+   ══════════════════════════════════════════════════════════════════════ */
+.resume-preview {
+  margin-top: 1.5rem;
+  background: #fff;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+.resume-doc {
+  padding: 2.5rem 2.25rem;
+  color: #1a1a1a;
+  font-family: var(--font-body);
+  line-height: 1.55;
+  max-width: 780px;
+  margin: 0 auto;
+}
+.resume-doc h1 { font-family: var(--font-display); font-size: 1.9rem; margin: 0 0 0.2rem; letter-spacing: -0.01em; }
+.resume-role { font-size: 1rem; font-weight: 600; color: var(--accent); margin-bottom: 0.4rem; }
+.resume-contact { font-size: 0.85rem; color: #555; margin-bottom: 1.4rem; }
+.resume-section { margin-bottom: 1.3rem; }
+.resume-section h2 {
+  font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--accent); border-bottom: 1px solid #ddd; padding-bottom: 0.3rem; margin: 0 0 0.6rem;
+}
+.resume-entry { margin-bottom: 0.85rem; }
+.resume-entry-head { font-size: 0.92rem; margin-bottom: 0.25rem; }
+.resume-dates { float: right; color: #666; font-size: 0.82rem; font-weight: 400; }
+.resume-entry ul, .resume-section ul { margin: 0.2rem 0 0; padding-left: 1.2rem; }
+.resume-entry li, .resume-section li { font-size: 0.88rem; margin-bottom: 0.2rem; }
+.resume-section p { font-size: 0.9rem; margin: 0; }
+
+/* Modern: dark header band, brass accents — best for creative/design roles */
+.resume-doc--modern .resume-header {
+  margin: -2.5rem -2.25rem 1.5rem; padding: 2rem 2.25rem 1.5rem;
+  background: var(--ink); color: #fff;
+}
+.resume-doc--modern .resume-header h1 { color: #fff; }
+.resume-doc--modern .resume-header .resume-role { color: var(--accent-bright); }
+.resume-doc--modern .resume-header .resume-contact { color: rgba(255,255,255,0.75); }
+
+/* Traditional: plain single-column, no color, standard font — ATS-safe */
+.resume-doc--traditional { font-family: Georgia, 'Times New Roman', serif; }
+.resume-doc--traditional h1 { font-family: inherit; font-size: 1.6rem; }
+.resume-doc--traditional .resume-role { color: #333; font-weight: 700; }
+.resume-doc--traditional .resume-section h2 { color: #000; border-bottom: 1px solid #000; }
+
+@media (max-width: 640px) {
+  .resume-doc { padding: 1.5rem 1.25rem; }
+  .resume-doc--modern .resume-header { margin: -1.5rem -1.25rem 1.25rem; padding: 1.5rem 1.25rem 1.25rem; }
+  .resume-dates { float: none; display: block; margin-bottom: 0.15rem; }
+}
+
+/* Print / "Save as PDF": show only the resume, nothing else on the page */
+@media print {
+  body * { visibility: hidden; }
+  .resume-preview, .resume-preview * { visibility: visible; }
+  .resume-preview {
+    position: absolute; top: 0; left: 0; width: 100%; margin: 0;
+    border: none; box-shadow: none;
+  }
+  .resume-doc--modern .resume-header {
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+}
+
 /* ── Stats / Pills ── */
 .stat-pill {
   display: inline-flex;
