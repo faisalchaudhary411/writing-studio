@@ -122,6 +122,14 @@
   }
 
   // ── API Helper ──
+  // BUG FIX: this previously had two real gaps reported by users:
+  // 1) No timeout — if a provider hung instead of erroring cleanly, the
+  //    button just spun forever with no feedback.
+  // 2) `res.json()` assumed every response was JSON. A gateway timeout /
+  //    502/503 from the host returns an HTML error page, so `.json()` threw
+  //    a cryptic "Unexpected token '<'" SyntaxError that got shown to the
+  //    user verbatim instead of a clear message.
+  const REQUEST_TIMEOUT_MS = 90000;
   async function api(endpoint, data, method = "POST") {
     const headers = { "Content-Type": "application/json" };
     // CSRF: only present (and only needed) on admin-authenticated pages —
@@ -129,17 +137,76 @@
     // on public pages where the endpoint doesn't check for it.
     const csrfMeta = document.querySelector('meta[name="csrf-token"]');
     if (csrfMeta) headers["X-CSRF-Token"] = csrfMeta.content;
-    const opts = { method, headers };
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const opts = { method, headers, signal: controller.signal };
     if (method === "POST" && data) opts.body = JSON.stringify(data);
     try {
       const res = await fetch(endpoint, opts);
+      clearTimeout(timer);
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        throw new Error(
+          res.status >= 500
+            ? "Server is temporarily unavailable. Please try again in a moment."
+            : `Unexpected server response (${res.status}). Please try again.`
+        );
+      }
       const json = await res.json();
-      if (!res.ok && json.error) throw new Error(json.error);
+      if (!res.ok) throw new Error(json.error || `Request failed (${res.status}).`);
       return json;
     } catch (err) {
-      Toast.show(err.message, "error");
-      throw err;
+      clearTimeout(timer);
+      const message = err.name === "AbortError"
+        ? "This is taking longer than expected. The AI provider may be slow right now — please try again."
+        : (err.message || "Something went wrong. Please check your connection and try again.");
+      Toast.show(message, "error", 6000);
+      throw new Error(message);
     }
+  }
+
+  // ── Output rendering: text + a visible word/character count ──
+  // Directly addresses "no word counts shown" — every tool that renders a
+  // text result now shows how long the result actually is, right under it.
+  function renderOutput(el, text) {
+    if (!el) return;
+    el.textContent = text || "";
+    const words = (text || "").trim().split(/\s+/).filter(Boolean).length;
+    const chars = (text || "").length;
+    let stats = el.nextElementSibling;
+    if (!stats || !stats.classList || !stats.classList.contains("output-stats")) {
+      stats = document.createElement("div");
+      stats.className = "output-stats";
+      stats.style.cssText = "font-size:0.78rem;opacity:0.65;margin-top:0.35rem;text-align:right";
+      el.insertAdjacentElement("afterend", stats);
+    }
+    stats.textContent = `${words.toLocaleString()} words · ${chars.toLocaleString()} characters`;
+  }
+
+  // ── Character counters for any textarea/input with a maxlength set ──
+  // Directly addresses "no limits shown to user" — the server has always
+  // enforced length limits on several tools, but nothing on the page told
+  // the user what the limit was until their request got rejected.
+  function initCharCounters() {
+    document.querySelectorAll("textarea[maxlength], input[maxlength]").forEach(field => {
+      // Skip fields that already have their own counter markup (contact form).
+      if (field.dataset.counterInit) return;
+      field.dataset.counterInit = "1";
+      const max = parseInt(field.getAttribute("maxlength"), 10);
+      if (!max) return;
+      const counter = document.createElement("div");
+      counter.className = "char-counter";
+      counter.style.cssText = "font-size:0.78rem;opacity:0.6;text-align:right;margin-top:0.25rem";
+      field.insertAdjacentElement("afterend", counter);
+      const update = () => {
+        const len = field.value.length;
+        counter.textContent = `${len.toLocaleString()} / ${max.toLocaleString()}`;
+        counter.style.opacity = len >= max ? "1" : "0.6";
+        counter.style.color = len >= max ? "var(--danger, #e74c3c)" : "";
+      };
+      field.addEventListener("input", update);
+      update();
+    });
   }
 
   // ── Check remaining daily actions before showing an ad ──
@@ -230,7 +297,7 @@
           word_count: document.getElementById("urdu-length").value,
           topic
         });
-        output.textContent = res.result;
+        renderOutput(output, res.result);
         output.className = "output-box " + (langStyle === "Roman Urdu" ? "ltr" : "urdu");
         output.style.display = "block";
         if (res.warning) Toast.show(res.warning, "error", 7000);
@@ -264,7 +331,7 @@
             prop_lang: lang
           });
           const out = document.getElementById("proposal-output");
-          out.textContent = res.result;
+          renderOutput(out, res.result);
           out.className = "output-box " + (lang === "Pure Urdu" ? "urdu" : "ltr");
           out.style.display = "block";
           if (res.warning) Toast.show(res.warning, "error", 7000);
@@ -302,7 +369,7 @@
             note: document.getElementById("inv-note").value
           });
           const out = document.getElementById("invoice-output");
-          out.textContent = res.result;
+          renderOutput(out, res.result);
           out.style.display = "block";
           updateActionsLeft();
         } finally {
@@ -347,7 +414,7 @@
             etone: document.getElementById("email-tone").value
           });
           const out = document.getElementById("email-output");
-          out.textContent = res.result;
+          renderOutput(out, res.result);
           out.className = "output-box " + (lang === "Pure Urdu" ? "urdu" : "ltr");
           out.style.display = "block";
           if (res.warning) Toast.show(res.warning, "error", 7000);
@@ -436,7 +503,7 @@
           focus: document.getElementById("proof-focus").value
         });
         const out = document.getElementById("proof-output");
-        out.textContent = res.result;
+        renderOutput(out, res.result);
         out.className = "output-box " + (lang === "Roman Urdu" ? "ltr" : "urdu");
         out.style.display = "block";
         const dl = document.getElementById("download-proof-btn");
@@ -470,7 +537,7 @@
           channel: document.getElementById("yt-channel").value.trim()
         });
         const out = document.getElementById("yt-output");
-        out.textContent = res.result;
+        renderOutput(out, res.result);
         out.className = "output-box " + (lang === "Pure Urdu (اردو)" ? "urdu" : "ltr");
         out.style.display = "block";
         const dl = document.getElementById("download-yt-btn");
@@ -484,10 +551,84 @@
     });
   }
 
+  // ── Resume: escape + styled HTML builder for the printable preview ──
+  // The structured resume fields ultimately echo back things the user typed
+  // (name, contact, experience) via the LLM, so they're escaped before being
+  // inserted with innerHTML — otherwise a name like "<script>" would be
+  // rendered as HTML instead of text.
+  function escapeHtml(str) {
+    return (str || "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  function buildResumeHTML(d, tpl) {
+    const esc = escapeHtml;
+    const contact = d.contact || {};
+    const contactLine = [contact.email, contact.phone, contact.location].filter(Boolean).map(esc).join(" &nbsp;·&nbsp; ");
+    const summary = d.summary
+      ? `<section class="resume-section"><h2>Professional Summary</h2><p>${esc(d.summary)}</p></section>` : "";
+    const experience = (d.experience || []).length
+      ? `<section class="resume-section"><h2>Experience</h2>${(d.experience || []).map(e => `
+          <div class="resume-entry">
+            <div class="resume-entry-head">
+              ${e.dates ? `<span class="resume-dates">${esc(e.dates)}</span>` : ""}
+              <strong>${esc(e.title || "")}</strong>${e.company ? " — " + esc(e.company) : ""}
+            </div>
+            <ul>${(e.bullets || []).map(b => `<li>${esc(b)}</li>`).join("")}</ul>
+          </div>`).join("")}</section>` : "";
+    const education = (d.education || []).length
+      ? `<section class="resume-section"><h2>Education</h2>${(d.education || [])
+          .map(e => `<div class="resume-entry-head">${[e.degree, e.institute, e.year].filter(Boolean).map(esc).join(" — ")}</div>`)
+          .join("")}</section>` : "";
+    const skills = (d.skills || []).length
+      ? `<section class="resume-section"><h2>Skills</h2><p>${(d.skills || []).map(esc).join(", ")}</p></section>` : "";
+    const extra = (d.extra || []).length
+      ? `<section class="resume-section"><h2>Additional</h2><ul>${(d.extra || []).map(x => `<li>${esc(x)}</li>`).join("")}</ul></section>` : "";
+    const body = summary + experience + education + skills + extra;
+
+    if (tpl === "traditional") {
+      return `<div class="resume-doc resume-doc--traditional">
+        <h1>${esc(d.name)}</h1>
+        <div class="resume-role">${esc(d.role || "")}</div>
+        <div class="resume-contact">${contactLine}</div>
+        ${body}
+      </div>`;
+    }
+    return `<div class="resume-doc resume-doc--modern">
+      <header class="resume-header">
+        <h1>${esc(d.name)}</h1>
+        <div class="resume-role">${esc(d.role || "")}</div>
+        <div class="resume-contact">${contactLine}</div>
+      </header>
+      ${body}
+    </div>`;
+  }
+
   // ── Resume / CV Builder ──
   function initResume() {
     const btn = document.getElementById("generate-cv-btn");
     if (!btn) return;
+    let lastResumeData = null;
+    const templateSelect = document.getElementById("cv-template");
+    const preview = document.getElementById("cv-resume-preview");
+    const pdfBtn = document.getElementById("download-cv-pdf-btn");
+    const actions = document.getElementById("cv-actions");
+
+    function renderPreview() {
+      if (!preview) return;
+      if (!lastResumeData) {
+        preview.style.display = "none";
+        if (pdfBtn) pdfBtn.style.display = "none";
+        return;
+      }
+      const tpl = templateSelect ? templateSelect.value : "modern";
+      preview.innerHTML = buildResumeHTML(lastResumeData, tpl);
+      preview.style.display = "block";
+      if (pdfBtn) pdfBtn.style.display = "inline-flex";
+    }
+
+    if (templateSelect) templateSelect.addEventListener("change", renderPreview);
+    if (pdfBtn) pdfBtn.addEventListener("click", () => window.print());
+
     btn.addEventListener("click", async () => {
       const name = document.getElementById("cv-name").value.trim();
       const role = document.getElementById("cv-role").value.trim();
@@ -505,6 +646,7 @@
           phone: document.getElementById("cv-phone").value.trim(),
           location: document.getElementById("cv-location").value.trim(),
           lang,
+          template: templateSelect ? templateSelect.value : "modern",
           summary: document.getElementById("cv-summary").value.trim(),
           experience: document.getElementById("cv-experience").value.trim(),
           education: document.getElementById("cv-education").value.trim(),
@@ -512,17 +654,61 @@
           extra: document.getElementById("cv-extra").value.trim()
         });
         const out = document.getElementById("cv-output");
-        out.textContent = res.result;
-        out.className = "output-box " + (lang === "Pure Urdu (اردو)" ? "urdu" : "ltr");
-        out.style.display = "block";
-        const dl = document.getElementById("download-cv-btn");
-        if (dl) dl.style.display = "inline-flex";
+        renderOutput(out, res.result);
+        out.className = "output-box ltr";
+        if (actions) actions.style.display = "flex";
+        if (res.structured) {
+          lastResumeData = res.structured;
+          out.style.display = "none"; // styled preview replaces the raw text view
+          const stats = out.nextElementSibling;
+          if (stats && stats.classList && stats.classList.contains("output-stats")) stats.style.display = "none";
+          renderPreview();
+        } else {
+          lastResumeData = null;
+          out.style.display = "block";
+          if (preview) preview.style.display = "none";
+          if (pdfBtn) pdfBtn.style.display = "none";
+        }
         if (res.warning) Toast.show(res.warning, "error", 7000);
         updateActionsLeft();
       } finally {
         btn.disabled = false;
         btn.textContent = "📄 Generate Resume";
       }
+    });
+  }
+
+  // ── WhatsApp: split output into copy-able cards ──
+  // The whole point of this tool is "paste once into WhatsApp Business
+  // settings" — a single wall of text made that fiddly (select the right
+  // paragraph, copy, repeat). Splitting on blank lines and giving each
+  // message its own Copy button matches how the backend already formats
+  // "Full set" and multi-option output (separate paragraphs per message).
+  function renderCopyableBlocks(container, text, isUrdu) {
+    if (!container) return;
+    const blocks = (text || "").split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
+    container.innerHTML = "";
+    container.style.display = blocks.length ? "grid" : "none";
+    blocks.forEach(block => {
+      const card = document.createElement("div");
+      card.className = "wa-block " + (isUrdu ? "urdu" : "ltr");
+      const p = document.createElement("div");
+      p.className = "wa-block-text";
+      p.textContent = block;
+      const copyBtn = document.createElement("button");
+      copyBtn.type = "button";
+      copyBtn.className = "btn btn-ghost btn-sm wa-block-copy";
+      copyBtn.textContent = "📋 Copy";
+      copyBtn.addEventListener("click", () => {
+        navigator.clipboard.writeText(block).then(() => {
+          copyBtn.textContent = "✓ Copied";
+          Toast.show("Copied — now paste it into WhatsApp Business settings", "success", 3500);
+          setTimeout(() => { copyBtn.textContent = "📋 Copy"; }, 1500);
+        }).catch(() => Toast.show("Couldn't copy automatically — select the text and copy manually", "error"));
+      });
+      card.appendChild(p);
+      card.appendChild(copyBtn);
+      container.appendChild(card);
     });
   }
 
@@ -545,9 +731,11 @@
           details: document.getElementById("wa-details").value.trim()
         });
         const out = document.getElementById("wa-output");
-        out.textContent = res.result;
-        out.className = "output-box " + (lang === "Pure Urdu (اردو)" ? "urdu" : "ltr");
-        out.style.display = "block";
+        renderOutput(out, res.result);
+        out.style.display = "none"; // raw text stays only as the download source
+        const stats = out.nextElementSibling;
+        if (stats && stats.classList && stats.classList.contains("output-stats")) stats.style.display = "none";
+        renderCopyableBlocks(document.getElementById("wa-blocks"), res.result, lang === "Pure Urdu (اردو)");
         const dl = document.getElementById("download-wa-btn");
         if (dl) dl.style.display = "inline-flex";
         if (res.warning) Toast.show(res.warning, "error", 7000);
@@ -578,7 +766,7 @@
           target: document.getElementById("timing-target").value
         });
         const out = document.getElementById("timing-output");
-        out.textContent = res.result;
+        renderOutput(out, res.result);
         out.className = "output-box ltr";
         out.style.display = "block";
         const dl = document.getElementById("download-timing-btn");
@@ -895,6 +1083,7 @@
     initWhatsappReplies();
     initScriptTiming();
     initDownloads();
+    initCharCounters();
     initStepper();
     initAdmin();
     Modal.init();
