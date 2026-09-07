@@ -1684,6 +1684,21 @@ def call_llm(system: str, user: str, max_tokens=2000):
         errors.append(f"{name}: {err}")
     return None, " | ".join(errors), False
 
+# Shared "sound like a real Pakistani, not a translated dictionary" note.
+# Originally this natural-Urdu guidance only lived inside get_urdu_prompt()
+# (used by the dedicated Urdu Writer tool). Every OTHER tool that also
+# offers a Pure Urdu / Roman Urdu option (YouTube SEO, Resume, WhatsApp
+# Replies, Proposals, Emails) had only a one-line language instruction with
+# none of these guardrails — which is very likely why those specific tools
+# were the ones producing stiff, formal, "translated" Urdu (بارگاہ، منجانب،
+# دستیاب کروانا-style words) instead of the everyday Urdu a Pakistani
+# actually types. Reusing the same note everywhere keeps the tone consistent
+# across the whole site instead of only in one tool.
+NATURAL_URDU_NOTE = """
+یاد رکھو: عام، قدرتی پاکستانی اردو لکھو — اخبار یا کتاب والی اردو نہیں۔
+بھاری اور کتابی الفاظ (جیسے "بارگاہ"، "منجانب"، "مستعار لینا"، "دستیاب کروانا") بالکل استعمال نہ کرو۔
+سیدھے، روزمرہ الفاظ استعمال کرو جیسے پڑھا لکھا پاکستانی WhatsApp یا بات چیت میں لکھتا ہے۔ جملے چھوٹے اور صاف رکھو۔"""
+
 def get_urdu_prompt(content_type, tone, lang_style, word_count):
     lang = {
         "Pure Urdu (اردو)": """زبان: خالص اردو — مگر عام، قدرتی پاکستانی اردو۔
@@ -2393,6 +2408,14 @@ def api_generate_srt():
     wps = int(data.get("wps", 8))
     if not script:
         return jsonify({"error": "Script required"}), 400
+    # BUG FIX: every sibling endpoint (proofread, translate-srt, script-timing)
+    # rejects overly-long input up front with a clear message. This one
+    # didn't — a long pasted script could blow the context budget for this
+    # model and come back as a truncated/garbled SRT with no explanation.
+    # Matching the same defensive pattern here, paired with the client-side
+    # character counter added to the Subtitles page.
+    if len(script) > 12000:
+        return jsonify({"error": "Script is too long for one pass (~12,000 characters max). Please split it into smaller sections."}), 400
     # BUG FIX: the UI allowed up to 60 minutes, but max_tokens was fixed at
     # 3000 regardless — and Groq's hard ceiling for this model is 8192
     # tokens/request, which physically cannot fit a proper SRT file for
@@ -2505,10 +2528,10 @@ def api_generate_youtube_seo():
     if not topic:
         return jsonify({"error": "Topic or script summary is required"}), 400
     lang_inst = {
-        "Pure Urdu (اردو)": "Write titles, description and tags primarily in pure Pakistani Urdu (Nastaliq-friendly wording).",
-        "Roman Urdu": "Write in natural Roman Urdu as Pakistanis type on YouTube.",
+        "Pure Urdu (اردو)": "Write titles, description and tags primarily in pure Pakistani Urdu (Nastaliq-friendly wording)." + NATURAL_URDU_NOTE,
+        "Roman Urdu": "Write in natural Roman Urdu as Pakistanis type on YouTube — 'yaar', 'bhai', 'matlab' style, not a stiff translation.",
         "English": "Write in clear, SEO-friendly English.",
-        "Mixed (Urdu + English)": "Use a natural Urdu-English mix common on Pakistani YouTube."
+        "Mixed (Urdu + English)": "Use a natural Urdu-English mix common on Pakistani YouTube." + NATURAL_URDU_NOTE
     }.get(lang, "Write in natural language for Pakistani viewers.")
     channel_line = f"Channel name for CTA: {channel}" if channel else "No specific channel name — use generic subscribe CTA."
     system = f"""You are a YouTube growth expert for Pakistani creators.
@@ -2548,6 +2571,70 @@ Be specific to the topic. No generic filler. Sound human, not spammy."""
         resp["warning"] = "Output may be cut off — try a shorter topic summary."
     return jsonify(resp)
 
+def _extract_json_block(text):
+    """Strip markdown code fences some models wrap JSON in, e.g. ```json ... ```."""
+    text = (text or "").strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    return text.strip()
+
+def _parse_resume_json(raw):
+    """Best-effort parse of the model's resume JSON. Tries the full response
+    first, then falls back to the outermost {...} block in case the model
+    added stray preamble/explanation despite instructions not to. Returns
+    None (never raises) if nothing usable comes out, so the caller can fall
+    back to showing plain text instead of crashing on a bad response."""
+    text = _extract_json_block(raw)
+    for candidate in (text, text[text.find("{"): text.rfind("}") + 1] if "{" in text and "}" in text else ""):
+        if not candidate:
+            continue
+        try:
+            data = json.loads(candidate)
+            if isinstance(data, dict) and data.get("name"):
+                return data
+        except Exception:
+            continue
+    return None
+
+def _resume_json_to_text(d):
+    """Deterministic plain-text rendering of the structured resume — used for
+    the .txt download and as the fallback view if the styled template ever
+    fails to render, so both paths always come from the same one LLM call."""
+    lines = [d.get("name", "").strip()]
+    if d.get("role"):
+        lines.append(d["role"])
+    contact = d.get("contact") or {}
+    contact_line = " · ".join(filter(None, [contact.get("email"), contact.get("phone"), contact.get("location")]))
+    if contact_line:
+        lines.append(contact_line)
+    lines.append("")
+    if d.get("summary"):
+        lines += ["PROFESSIONAL SUMMARY", d["summary"], ""]
+    if d.get("experience"):
+        lines.append("EXPERIENCE")
+        for exp in d["experience"]:
+            header = " | ".join(filter(None, [exp.get("title"), exp.get("company"), exp.get("dates")]))
+            if header:
+                lines.append(header)
+            for b in (exp.get("bullets") or []):
+                lines.append(f"- {b}")
+        lines.append("")
+    if d.get("education"):
+        lines.append("EDUCATION")
+        for ed in d["education"]:
+            line = " | ".join(filter(None, [ed.get("degree"), ed.get("institute"), ed.get("year")]))
+            if line:
+                lines.append(line)
+        lines.append("")
+    if d.get("skills"):
+        lines += ["SKILLS", ", ".join(d["skills"]), ""]
+    if d.get("extra"):
+        lines.append("ADDITIONAL")
+        for e in d["extra"]:
+            lines.append(f"- {e}")
+    return "\n".join(lines).strip()
+
 @app.route("/api/generate-resume", methods=["POST"])
 def api_generate_resume():
     if not can_act():
@@ -2559,6 +2646,7 @@ def api_generate_resume():
     phone = data.get("phone", "").strip()
     location = data.get("location", "").strip()
     lang = data.get("lang", "English (Professional)")
+    template = data.get("template", "modern")
     summary = data.get("summary", "").strip()
     experience = data.get("experience", "").strip()
     education = data.get("education", "").strip()
@@ -2568,39 +2656,44 @@ def api_generate_resume():
         return jsonify({"error": "Name and target role are required"}), 400
     lang_inst = {
         "English (Professional)": "Write the entire CV in professional English.",
-        "Pure Urdu (اردو)": "Write the entire CV in clear, professional pure Pakistani Urdu.",
-        "Roman Urdu": "Write the entire CV in natural Roman Urdu (professional but readable).",
-        "Bilingual (Urdu + English)": "Produce a bilingual CV: section headers and key lines in both English and Urdu where natural; keep it clean and scannable."
+        "Pure Urdu (اردو)": "Write the entire CV in clear, professional pure Pakistani Urdu." + NATURAL_URDU_NOTE,
+        "Roman Urdu": "Write the entire CV in natural Roman Urdu (professional but readable, not a word-for-word translation).",
+        "Bilingual (Urdu + English)": "Produce a bilingual CV: put both an English and an Urdu version of each text value in the same string separated by ' / ', keeping it clean and scannable."
     }.get(lang, "Write in professional English.")
+    template_note = (
+        "This will be rendered into a plain, single-column ATS-safe template — do not use emojis, symbols, or special characters anywhere."
+        if template == "traditional" else
+        "This will be rendered into a modern styled template — plain text values only, no markdown formatting."
+    )
     system = f"""You are a career coach and resume writer helping Pakistani freelancers and job seekers (Fiverr, Upwork, local companies).
 
 {lang_inst}
+{template_note}
 
-Build a clean, modern plain-text resume (not markdown tables). Structure:
-
-NAME
-Role title
-Contact line (email · phone · location)
-
-PROFESSIONAL SUMMARY
-(2-4 strong sentences; invent a polished summary from the facts if the user left it blank — never invent fake jobs)
-
-EXPERIENCE
-(each role: title, company, dates if given, 2-4 achievement bullets)
-
-EDUCATION
-
-SKILLS
-(grouped if helpful)
-
-ADDITIONAL
-(certs, languages, links)
+Return ONLY a single valid JSON object — no markdown fences, no preamble, no explanation before or after it — matching exactly this shape:
+{{
+  "name": "Full Name",
+  "role": "Target role title",
+  "contact": {{"email": "...", "phone": "...", "location": "..."}},
+  "summary": "2-4 strong sentences",
+  "experience": [
+    {{"title": "...", "company": "...", "dates": "...", "bullets": ["achievement 1", "achievement 2"]}}
+  ],
+  "education": [
+    {{"degree": "...", "institute": "...", "year": "..."}}
+  ],
+  "skills": ["skill1", "skill2"],
+  "extra": ["certification / language / link, one per item"]
+}}
 
 Rules:
 - Do NOT invent employers, degrees, or dates the user did not provide.
+- If the user left summary blank, write a polished one from the facts — never invent fake jobs.
 - Strengthen weak bullet points into achievement-style language when the facts allow.
-- Keep it concise (one page worth of text).
-- Output ONLY the resume text, no preamble."""
+- Keep bullets concise — 1 line each, 3-4 bullets per role max.
+- If the user gave nothing for experience/education/extra, output an empty array [] for it — do not invent placeholder entries.
+- All text values must be plain strings — no markdown bold/asterisks/headers.
+- Output must be valid, parseable JSON: properly escaped quotes, no trailing commas, no comments."""
     user_blob = f"""Name: {name}
 Target role: {role}
 Email: {email}
@@ -2613,14 +2706,24 @@ Education:
 {education or '(none provided)'}
 Skills: {skills or '(none provided)'}
 Extra: {extra or '(none)'}"""
-    result, err, truncated = call_llm(system, user_blob, 2500)
+    result, err, truncated = call_llm(system, user_blob, 3400)
     if err:
         return jsonify({"error": err}), 500
-    record_action()
-    resp = {"result": result}
     if truncated:
-        resp["warning"] = "Resume may be incomplete — try shortening the experience section."
-    return jsonify(resp)
+        # A cut-off JSON object is very likely unparseable (an unterminated
+        # string/array), and even if it happened to parse it would be
+        # missing content — same "don't hand back broken output silently"
+        # policy as the SRT endpoints. Don't charge the daily quota for it.
+        return jsonify({"error": "The resume was cut off before finishing — try shortening the Experience/Education details and regenerate."}), 500
+    structured = _parse_resume_json(result)
+    record_action()
+    if not structured:
+        return jsonify({
+            "result": result.strip(),
+            "structured": None,
+            "warning": "Couldn't build the styled template from this result — showing plain text instead. Try regenerating for the visual version."
+        })
+    return jsonify({"result": _resume_json_to_text(structured), "structured": structured})
 
 @app.route("/api/generate-whatsapp-replies", methods=["POST"])
 def api_generate_whatsapp_replies():
