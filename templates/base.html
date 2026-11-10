@@ -31,7 +31,7 @@
   <link rel="icon" type="image/png" sizes="96x96" href="{{ url_for('static', filename='favicons/favicon-96x96.png') }}">
   <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='favicons/apple-touch-icon.png') }}">
   <link rel="manifest" href="{{ url_for('static', filename='favicons/site.webmanifest') }}">
-  <meta name="theme-color" content="#211A12">
+  <meta name="theme-color" content="#F7F6F3">
   {% if session.get('admin_auth') %}<meta name="csrf-token" content="{{ csrf_token() }}">{% endif %}
 
   <!-- Google Search Console -->
@@ -187,36 +187,42 @@
     </div>
 
     <!-- Footer -->
-    <footer class="footer">
+    <footer class="site-footer">
       <div class="container">
         <div class="footer-grid">
-          <div class="footer-col">
-            <div class="footer-heading">Tools</div>
-            <a href="{{ url_for('urdu_writer') }}" class="footer-link">Urdu AI Writer</a>
-            <a href="{{ url_for('freelancer') }}" class="footer-link">Freelancer Toolkit</a>
-            <a href="{{ url_for('subtitles') }}" class="footer-link">Subtitle Generator</a>
-            <a href="{{ url_for('proofread') }}" class="footer-link">Urdu Proofreader</a>
-            <a href="{{ url_for('youtube_seo') }}" class="footer-link">YouTube SEO</a>
-            <a href="{{ url_for('resume') }}" class="footer-link">Resume Builder</a>
-            <a href="{{ url_for('whatsapp_replies') }}" class="footer-link">WhatsApp Replies</a>
-            <a href="{{ url_for('script_timing') }}" class="footer-link">Script Timing</a>
+          <div>
+            <div class="footer-brand">QalamStudio</div>
+            <p class="footer-desc">Free AI writing tools for Pakistani creators — natural Urdu, freelancers, YouTube, and small business WhatsApp.</p>
+            <p class="footer-desc" style="margin-top:0.6rem">support@qalamstudio.xyz</p>
           </div>
           <div class="footer-col">
-            <div class="footer-heading">Company</div>
-            <a href="{{ url_for('about') }}" class="footer-link">About</a>
-            <a href="{{ url_for('blog') }}" class="footer-link">Blog</a>
-            <a href="{{ url_for('contact') }}" class="footer-link">Contact</a>
-            <a href="{{ url_for('request_pro') }}" class="footer-link">Studio Pro</a>
-            <a href="{{ url_for('privacy') }}" class="footer-link">Privacy</a>
-            <a href="{{ url_for('terms') }}" class="footer-link">Terms</a>
+            <h4>Tools</h4>
+            <a href="{{ url_for('urdu_writer') }}">Urdu AI Writer</a>
+            <a href="{{ url_for('freelancer') }}">Freelancer Toolkit</a>
+            <a href="{{ url_for('subtitles') }}">Subtitle Generator</a>
+            <a href="{{ url_for('proofread') }}">Urdu Proofreader</a>
+            <a href="{{ url_for('youtube_seo') }}">YouTube SEO</a>
+            <a href="{{ url_for('resume') }}">Resume Builder</a>
+            <a href="{{ url_for('whatsapp_replies') }}">WhatsApp Replies</a>
+            <a href="{{ url_for('script_timing') }}">Script Timing</a>
           </div>
           <div class="footer-col">
-            <div class="footer-heading">QalamStudio</div>
-            <p class="footer-blurb">Free AI writing tools for Pakistani creators — natural Urdu, freelancers, YouTube, and small business WhatsApp.</p>
-            <p class="footer-blurb" style="margin-top:0.5rem">📧 support@qalamstudio.xyz</p>
+            <h4>Company</h4>
+            <a href="{{ url_for('about') }}">About</a>
+            <a href="{{ url_for('blog') }}">Blog</a>
+            <a href="{{ url_for('contact') }}">Contact</a>
+            <a href="{{ url_for('request_pro') }}">Studio Pro</a>
+          </div>
+          <div class="footer-col">
+            <h4>Legal</h4>
+            <a href="{{ url_for('privacy') }}">Privacy</a>
+            <a href="{{ url_for('terms') }}">Terms</a>
           </div>
         </div>
-        <div class="footer-copy">© {{ year }} QalamStudio · Made in Pakistan · <a href="{{ url_for('landing') }}" class="footer-link" style="display:inline">Home</a></div>
+        <div class="footer-bottom">
+          <span>© {{ year }} QalamStudio · Made in Pakistan</span>
+          <a href="{{ url_for('landing') }}">Home</a>
+        </div>
       </div>
     </footer>
   </div>
