@@ -224,6 +224,13 @@
         </div>
       </div>
 
+      {% if pending_grace %}
+      <div class="callout callout-warning" style="margin-bottom:1.25rem">
+        <strong>{{ pending_grace }} grace approval{{ 's' if pending_grace != 1 }} awaiting finalization</strong>
+        <span>These customers have temporary Pro access. It stops automatically when the grace window ends unless you verify the payment and approve them below.</span>
+      </div>
+      {% endif %}
+
       <div class="tabs">
         <button class="tab-btn active">Pending ({{ pending|length }})</button>
         <button class="tab-btn">Approved ({{ approved|length }})</button>
@@ -238,7 +245,7 @@
               <div style="display:flex;align-items:center;gap:0.5rem;width:100%;flex-wrap:wrap">
                 <span class="status-badge status-pending">Pending</span>
                 {% if req.auto_approved %}
-                  <span class="status-badge status-approved" style="background:rgba(63,107,74,0.1);color:var(--success);border-color:rgba(63,107,74,0.25)">⚡ Auto-Approved</span>
+                  <span class="status-badge status-approved" style="background:rgba(47,107,58,0.1);color:var(--success);border-color:rgba(47,107,58,0.25)">⚡ Auto-Approved</span>
                 {% endif %}
                 <strong style="color:var(--text-primary)">{{ req.name }}</strong>
                 <span style="color:var(--text-muted);font-size:0.75rem;margin-left:auto">{{ req.date }}</span>
@@ -268,7 +275,7 @@
               <div style="display:flex;align-items:center;gap:0.5rem;width:100%;flex-wrap:wrap">
                 <span class="status-badge status-approved">Approved</span>
                 {% if req.auto_approved %}
-                  <span class="status-badge" style="background:rgba(63,107,74,0.1);color:var(--success);border-color:rgba(63,107,74,0.25)">⚡ Auto</span>
+                  <span class="status-badge" style="background:rgba(47,107,58,0.1);color:var(--success);border-color:rgba(47,107,58,0.25)">⚡ Auto</span>
                 {% endif %}
                 <strong style="color:var(--text-primary)">{{ req.name }}</strong>
                 <span style="color:var(--text-muted);font-size:0.75rem;margin-left:auto">{{ req.approved_date or req.date }}</span>

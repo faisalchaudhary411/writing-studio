@@ -12,7 +12,7 @@
         <a href="{{ url_for('request_pro') }}" class="btn btn-secondary" style="width:100%;margin-top:1rem;">← Back to Get Pro</a>
 
       {% elif error == "not_verified" %}
-        <div style="background:rgba(150,50,50,0.08);border:1px solid rgba(150,50,50,0.25);border-radius:12px;padding:1rem;">
+        <div style="background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.25);border-radius:12px;padding:1rem;">
           <div style="color:var(--danger);font-weight:700;font-size:0.9rem;margin-bottom:0.5rem;">Payment not confirmed yet</div>
           <p style="color:var(--text-secondary);font-size:0.85rem;line-height:1.6;">
             If you completed the payment, it can take a few minutes to process. Error: <code style="color:var(--text-muted);">{{ verify_error }}</code>
@@ -26,7 +26,7 @@
       {% elif success %}
         <p style="color:var(--success);font-weight:700;">Payment verified successfully!</p>
 
-        <div style="background:rgba(63,107,74,0.08);border:1px solid rgba(63,107,74,0.25);border-radius:12px;padding:1rem;margin-top:1rem;">
+        <div style="background:rgba(47,107,58,0.08);border:1px solid rgba(47,107,58,0.25);border-radius:12px;padding:1rem;margin-top:1rem;">
           <div style="color:var(--success);font-weight:700;font-size:0.9rem;margin-bottom:0.5rem;">Your license key is ready</div>
           <code style="color:var(--accent-secondary);font-size:1.05rem;font-family:var(--font-mono);word-break:break-all;">{{ license_key }}</code>
         </div>

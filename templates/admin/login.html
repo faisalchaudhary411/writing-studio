@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin Login — QalamStudio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500&family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
@@ -13,7 +16,7 @@
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
           {% for category, message in messages %}
-            <div style="background:{{ 'rgba(150,50,50,0.1)' if category == 'error' else 'rgba(63,107,74,0.1)' }};border:1px solid {{ 'rgba(150,50,50,0.25)' if category == 'error' else 'rgba(63,107,74,0.25)' }};color:{{ 'var(--danger)' if category == 'error' else 'var(--success)' }};padding:0.75rem;border-radius:8px;font-size:0.85rem;margin-bottom:1rem">
+            <div style="background:{{ 'rgba(192,57,43,0.1)' if category == 'error' else 'rgba(47,107,58,0.1)' }};border:1px solid {{ 'rgba(192,57,43,0.25)' if category == 'error' else 'rgba(47,107,58,0.25)' }};color:{{ 'var(--danger)' if category == 'error' else 'var(--success)' }};padding:0.75rem;border-radius:8px;font-size:0.85rem;margin-bottom:1rem">
               {{ message }}
             </div>
           {% endfor %}

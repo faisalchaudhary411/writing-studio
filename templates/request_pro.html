@@ -32,7 +32,7 @@
     <div class="glass-panel">
       {% if step == 1 %}
         {% if checkout_url and checkout_url.startswith('http') %}
-        <div style="background:rgba(124,42,46,0.06);border:1px solid rgba(124,42,46,0.2);border-radius:14px;padding:1rem 1.2rem;margin-bottom:1.5rem">
+        <div style="background:rgba(59,59,152,0.06);border:1px solid rgba(59,59,152,0.2);border-radius:14px;padding:1rem 1.2rem;margin-bottom:1.5rem">
           <div style="font-size:0.8rem;color:var(--accent-secondary);font-weight:700;margin-bottom:0.5rem">PAY BY CARD (INTERNATIONAL)</div>
           <div style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:0.8rem">Instant activation via card or PayPal.</div>
           <a href="{{ checkout_url }}" class="btn btn-primary" style="width:100%">Pay with card →</a>
@@ -41,7 +41,7 @@
         {% endif %}
         <form method="POST" action="{{ url_for('request_pro') }}">
           <input type="hidden" name="step" value="1">
-          <div style="background:rgba(156,107,46,0.06);border:1px solid rgba(156,107,46,0.2);border-radius:14px;padding:1rem 1.2rem;margin-bottom:1.5rem">
+          <div style="background:rgba(59,59,152,0.06);border:1px solid rgba(59,59,152,0.2);border-radius:14px;padding:1rem 1.2rem;margin-bottom:1.5rem">
             <div style="font-size:0.8rem;color:var(--accent);font-weight:700;margin-bottom:0.5rem">PRO INCLUDES</div>
             <div style="font-size:0.82rem;color:var(--text-secondary);line-height:1.8">
               {{ pro_price_label }}/month · Unlimited actions · No ads · Priority generation · All language styles · Batch subtitle translation
@@ -65,7 +65,7 @@
       {% elif step == 2 %}
         <form method="POST" action="{{ url_for('request_pro') }}">
           <input type="hidden" name="step" value="2">
-          <div style="background:rgba(156,107,46,0.06);border:1px solid rgba(156,107,46,0.2);border-radius:14px;padding:1rem 1.2rem;margin-bottom:1.5rem;text-align:center">
+          <div style="background:rgba(59,59,152,0.06);border:1px solid rgba(59,59,152,0.2);border-radius:14px;padding:1rem 1.2rem;margin-bottom:1.5rem;text-align:center">
             <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.2rem">Amount to Pay</div>
             <div style="font-size:2rem;font-weight:800;color:var(--accent-secondary)">{{ pro_price_label }}</div>
             <div style="font-size:0.75rem;color:var(--text-muted)">One month · QalamStudio Pro</div>
@@ -101,7 +101,7 @@
       {% elif step == 3 %}
         <form method="POST" action="{{ url_for('request_pro') }}" enctype="multipart/form-data">
           <input type="hidden" name="step" value="3">
-          <div style="background:rgba(124,42,46,0.06);border:1px solid rgba(124,42,46,0.2);border-radius:14px;padding:1rem 1.2rem;margin-bottom:1.5rem">
+          <div style="background:rgba(59,59,152,0.06);border:1px solid rgba(59,59,152,0.2);border-radius:14px;padding:1rem 1.2rem;margin-bottom:1.5rem">
             <div style="font-size:0.8rem;color:var(--accent-secondary);font-weight:700;margin-bottom:0.3rem">Payment Proof</div>
             <div style="font-size:0.8rem;color:var(--text-secondary);line-height:1.7">Upload a screenshot of your payment transaction. We will verify and send your license key within a few hours.</div>
           </div>
@@ -132,12 +132,12 @@
         <div class="text-center" style="padding: 2rem 0">
           {% if auto_approved and license_key %}
             <h2 style="font-family:var(--font-display);font-weight:600;color:var(--text-primary);margin-bottom:1rem">Your Pro License is Ready!</h2>
-            <div style="background:rgba(63,107,74,0.08);border:1px solid rgba(63,107,74,0.25);border-radius:12px;padding:1.5rem;text-align:center;margin-bottom:1.5rem">
+            <div style="background:rgba(47,107,58,0.08);border:1px solid rgba(47,107,58,0.25);border-radius:12px;padding:1.5rem;text-align:center;margin-bottom:1.5rem">
               <div style="color:var(--text-muted);font-size:0.8rem;margin-bottom:0.5rem">Your License Key</div>
               <code id="auto-key" style="color:var(--success);font-family:var(--font-mono);font-size:1.1rem;font-weight:700;letter-spacing:1px;display:block;margin-bottom:1rem;word-break:break-all">{{ license_key }}</code>
               <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('{{ license_key }}'); this.textContent='Copied!'">Copy Key</button>
             </div>
-            <div style="background:rgba(124,42,46,0.06);border:1px solid rgba(124,42,46,0.2);border-radius:12px;padding:1rem;text-align:left;margin-bottom:1.5rem">
+            <div style="background:rgba(59,59,152,0.06);border:1px solid rgba(59,59,152,0.2);border-radius:12px;padding:1rem;text-align:left;margin-bottom:1.5rem">
               <div style="color:var(--accent-secondary);font-weight:700;font-size:0.85rem;margin-bottom:0.5rem">Also emailed to {{ email }}</div>
               <div style="color:var(--text-secondary);font-size:0.8rem;line-height:1.7">
                 • Your key is already activated on this device<br>
@@ -145,7 +145,7 @@
                 • Request ID: <code style="color:var(--success);font-family:var(--font-mono)">{{ req_id }}</code>
               </div>
             </div>
-            <div style="background:rgba(166,117,42,0.08);border:1px solid rgba(166,117,42,0.25);border-radius:12px;padding:1rem;text-align:left;margin-bottom:1.5rem">
+            <div style="background:rgba(183,121,31,0.08);border:1px solid rgba(183,121,31,0.25);border-radius:12px;padding:1rem;text-align:left;margin-bottom:1.5rem">
               <div style="color:var(--warning);font-weight:700;font-size:0.85rem;margin-bottom:0.5rem">This access is temporary until verified</div>
               <div style="color:var(--text-secondary);font-size:0.8rem;line-height:1.7">
                 We manually verify every payment. Your Pro access will <strong style="color:var(--text-primary)">automatically stop working after {{ grace_hours }} hours</strong>
@@ -156,7 +156,7 @@
             <a href="{{ url_for('urdu_writer') }}" class="btn btn-secondary btn-lg">Start Writing</a>
           {% else %}
             <h2 style="font-family:var(--font-display);font-weight:600;color:var(--text-primary);margin-bottom:1rem">Payment Proof Submitted!</h2>
-            <div style="background:rgba(63,107,74,0.08);border:1px solid rgba(63,107,74,0.25);border-radius:12px;padding:1.5rem;text-align:left">
+            <div style="background:rgba(47,107,58,0.08);border:1px solid rgba(47,107,58,0.25);border-radius:12px;padding:1.5rem;text-align:left">
               <div style="color:var(--success);font-weight:700;font-size:0.9rem;margin-bottom:0.5rem">What Happens Next</div>
               <div style="color:var(--text-secondary);font-size:0.85rem;line-height:1.9">
                 • We will verify your payment within a few hours<br>
