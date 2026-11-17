@@ -75,6 +75,13 @@ class Config:
     WHATSAPP_ADMIN_NUMBER = os.environ.get("WHATSAPP_ADMIN_NUMBER", "")
     WAPPFLY_API_KEY = os.environ.get("WAPPFLY_API_KEY", "")
     WAPPFLY_ADMIN_NUMBER = os.environ.get("WAPPFLY_ADMIN_NUMBER", "")
+    # Contact-form protection. Turnstile (free, Cloudflare) is optional but is
+    # the strongest defence: set both keys and a real CAPTCHA is enforced.
+    TURNSTILE_SITE_KEY = os.environ.get("TURNSTILE_SITE_KEY", "")
+    TURNSTILE_SECRET_KEY = os.environ.get("TURNSTILE_SECRET_KEY", "")
+    # Auto-reply to the address typed into the form is OFF by default: bots
+    # abuse it to email random victims through our domain. Set to "1" to re-enable.
+    CONTACT_AUTO_REPLY = os.environ.get("CONTACT_AUTO_REPLY", "0") == "1"
     # Must be an address on a domain verified in Mailtrap's Sending Domain
     # settings — unverified "from" addresses get rejected by the API.
     CONTACT_FROM_EMAIL = os.environ.get("CONTACT_FROM_EMAIL", "QalamStudio <hello@qalamstudio.xyz>")
@@ -165,12 +172,16 @@ _cache_ttl = 60
 # ── Contact form anti-spam (in-memory; resets on restart / new worker) ──
 # Limits how many contact submissions one IP can make. Enough for real
 # users, blocks bulk bots that rotate emails but reuse the same proxy/IP.
-_CONTACT_RATE = {}  # ip_hash -> list of unix timestamps
-_CONTACT_RATE_LOCK = threading.Lock()
-CONTACT_RATE_MAX = 5          # max submissions
-CONTACT_RATE_WINDOW_SEC = 3600  # per hour
-CONTACT_MIN_FILL_SEC = 3      # form must be open at least this long
-CONTACT_MAX_FILL_SEC = 7200   # and not older than 2 hours (stale/replay)
+_CONTACT_BUCKETS = {}  # (bucket, key) -> list of unix timestamps
+_CONTACT_BUCKETS_LOCK = threading.Lock()
+_CONTACT_USED_NONCES = {}  # form-token nonce -> expiry (single-use tokens)
+CONTACT_RATE_MAX = 3            # accepted messages per IP ...
+CONTACT_RATE_WINDOW_SEC = 3600  # ... per hour
+CONTACT_IP_DAILY_MAX = 8        # per IP per 24h
+CONTACT_EMAIL_DAILY_MAX = 2     # per email address per 24h
+CONTACT_GLOBAL_HOURLY_MAX = 15  # whole site per hour: caps the damage of any botnet
+CONTACT_MIN_FILL_SEC = 5        # form must be open at least this long
+CONTACT_MAX_FILL_SEC = 3600     # and not older than 1 hour (stale/replay)
 
 # Common disposable / throwaway email domains — block these at the contact form.
 _DISPOSABLE_EMAIL_DOMAINS = {
@@ -2001,27 +2012,100 @@ def _contact_auto_reply(category, name):
     return replies.get(category, ("We received your message", f"Hi {name},\n\nThanks for contacting QalamStudio. We received your message and will get back to you as soon as possible.\n\n— QalamStudio"))
 
 
-def _contact_rate_limited(ip_hash: str) -> bool:
-    """True if this IP has already hit the contact form too many times recently."""
-    if not ip_hash:
+def _bucket_count(bucket: str, key: str, window: int) -> int:
+    now = time.time()
+    with _CONTACT_BUCKETS_LOCK:
+        stamps = [t for t in _CONTACT_BUCKETS.get((bucket, key), []) if t >= now - window]
+        if stamps:
+            _CONTACT_BUCKETS[(bucket, key)] = stamps
+        else:
+            _CONTACT_BUCKETS.pop((bucket, key), None)
+        return len(stamps)
+
+
+def _bucket_add(bucket: str, key: str) -> None:
+    with _CONTACT_BUCKETS_LOCK:
+        _CONTACT_BUCKETS.setdefault((bucket, key), []).append(time.time())
+
+
+def _contact_rate_limited(ip_hash: str, email: str = "") -> str:
+    """Return the name of the limit that was hit ('' if none)."""
+    if _bucket_count("global", "all", 3600) >= CONTACT_GLOBAL_HOURLY_MAX:
+        return "global"
+    if ip_hash:
+        if _bucket_count("ip", ip_hash, CONTACT_RATE_WINDOW_SEC) >= CONTACT_RATE_MAX:
+            return "ip"
+        if _bucket_count("ip-day", ip_hash, 86400) >= CONTACT_IP_DAILY_MAX:
+            return "ip"
+    if email and _bucket_count("email", email.lower(), 86400) >= CONTACT_EMAIL_DAILY_MAX:
+        return "email"
+    return ""
+
+
+def _contact_rate_record(ip_hash: str, email: str = "") -> None:
+    _bucket_add("global", "all")
+    if ip_hash:
+        _bucket_add("ip", ip_hash)
+        _bucket_add("ip-day", ip_hash)
+    if email:
+        _bucket_add("email", email.lower())
+
+
+_SPAM_WORDS = (
+    "seo service", "backlink", "guest post", "casino", "viagra", "cialis", "crypto invest",
+    "bitcoin", "forex", "loan offer", "porn", "escort", "whatsapp group", "telegram", "click here",
+    "rank your website", "web traffic", "domain authority", "payday",
+)
+_LINK_RE = re.compile(r"(https?://|www\.|\b[\w-]+\.(?:com|net|org|xyz|ru|top|click|info|site|online|shop|cn)\b/)", re.I)
+
+
+def _contact_looks_like_spam(name: str, email: str, message: str) -> str:
+    """Cheap content checks. Returns a reason string, or '' if it looks human.
+    Spam is dropped *silently* (bot sees 'success'), so it learns nothing."""
+    low = message.lower()
+    if len(_LINK_RE.findall(message)) >= 2:
+        return "many-links"
+    if re.search(r"<\s*a\s|\[url[=\]]|<\s*/?\s*(script|iframe|img)", message, re.I):
+        return "markup"
+    if _LINK_RE.search(name) or "@" in name or re.fullmatch(r"[\d\W_]+", name):
+        return "bad-name"
+    if any(w in low for w in _SPAM_WORDS):
+        return "spam-words"
+    local = email.rsplit("@", 1)[0]
+    if len(local) > 40 or local.count(".") >= 5:
+        return "weird-email"
+    if name.strip().lower() == message.strip().lower():
+        return "name-eq-message"
+    if re.search(r"(.)\1{9,}", message):
+        return "repeated-chars"
+    return ""
+
+
+def _turnstile_enabled() -> bool:
+    return bool(Config.TURNSTILE_SITE_KEY and Config.TURNSTILE_SECRET_KEY)
+
+
+def _turnstile_ok(token: str, ip: str) -> bool:
+    """Verify a Cloudflare Turnstile response. If Cloudflare itself is
+    unreachable we fail open (other layers still apply) so real visitors are
+    never locked out by a third-party outage."""
+    if not token:
         return False
-    now = time.time()
-    cutoff = now - CONTACT_RATE_WINDOW_SEC
-    with _CONTACT_RATE_LOCK:
-        stamps = [t for t in _CONTACT_RATE.get(ip_hash, []) if t >= cutoff]
-        _CONTACT_RATE[ip_hash] = stamps
-        return len(stamps) >= CONTACT_RATE_MAX
+    try:
+        r = req.post(
+            "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+            data={"secret": Config.TURNSTILE_SECRET_KEY, "response": token, "remoteip": ip},
+            timeout=6,
+        )
+        return bool(r.json().get("success"))
+    except Exception as exc:
+        app.logger.warning("Turnstile verify unavailable, failing open: %s", exc)
+        return True
 
 
-def _contact_rate_record(ip_hash: str) -> None:
-    if not ip_hash:
-        return
-    now = time.time()
-    cutoff = now - CONTACT_RATE_WINDOW_SEC
-    with _CONTACT_RATE_LOCK:
-        stamps = [t for t in _CONTACT_RATE.get(ip_hash, []) if t >= cutoff]
-        stamps.append(now)
-        _CONTACT_RATE[ip_hash] = stamps
+def _clean_line(value: str, limit: int) -> str:
+    """Strip control characters (no CR/LF header tricks) and trim."""
+    return re.sub(r"[\x00-\x1f\x7f]+", " ", value or "").strip()[:limit]
 
 
 def _is_disposable_email(email: str) -> bool:
@@ -2032,34 +2116,38 @@ def _is_disposable_email(email: str) -> bool:
     return domain in _DISPOSABLE_EMAIL_DOMAINS
 
 
+def _contact_sig(payload: str) -> str:
+    return hmac.new(app.config["SECRET_KEY"].encode(), payload.encode(), hashlib.sha256).hexdigest()[:20]
+
+
 def _make_contact_token() -> str:
-    """Signed timestamp so bots cannot easily forge a valid form age."""
-    ts = str(int(time.time()))
-    sig = hmac.new(
-        app.config["SECRET_KEY"].encode(),
-        ts.encode(),
-        hashlib.sha256,
-    ).hexdigest()[:16]
-    return f"{ts}.{sig}"
+    """Signed, single-use token: timestamp + random nonce + HMAC."""
+    payload = f"{int(time.time())}.{secrets.token_hex(6)}"
+    return f"{payload}.{_contact_sig(payload)}"
 
 
 def _contact_token_ok(token: str) -> bool:
-    if not token or "." not in token:
+    """Valid signature, aged 5s-1h, and never used before (replay-proof)."""
+    parts = (token or "").split(".")
+    if len(parts) != 3:
         return False
-    ts_str, sig = token.rsplit(".", 1)
+    ts_str, nonce, sig = parts
+    if not hmac.compare_digest(sig, _contact_sig(f"{ts_str}.{nonce}")):
+        return False
     try:
-        ts = int(ts_str)
+        age = time.time() - int(ts_str)
     except ValueError:
         return False
-    expected = hmac.new(
-        app.config["SECRET_KEY"].encode(),
-        ts_str.encode(),
-        hashlib.sha256,
-    ).hexdigest()[:16]
-    if not hmac.compare_digest(sig, expected):
+    if not (CONTACT_MIN_FILL_SEC <= age <= CONTACT_MAX_FILL_SEC):
         return False
-    age = time.time() - ts
-    return CONTACT_MIN_FILL_SEC <= age <= CONTACT_MAX_FILL_SEC
+    now = time.time()
+    with _CONTACT_BUCKETS_LOCK:
+        for k in [k for k, exp in _CONTACT_USED_NONCES.items() if exp < now]:
+            del _CONTACT_USED_NONCES[k]
+        if nonce in _CONTACT_USED_NONCES:
+            return False
+        _CONTACT_USED_NONCES[nonce] = now + CONTACT_MAX_FILL_SEC + 60
+    return True
 
 
 def _notify_contact_inquiry(name, email, category, message, phone=""):
@@ -2091,62 +2179,92 @@ def _notify_contact_inquiry(name, email, category, message, phone=""):
             app.logger.warning("Wappfly contact fallback error: %s", exc)
     return notified
 
+def _render_contact():
+    return render_template(
+        "contact.html",
+        contact_token=_make_contact_token(),
+        turnstile_site_key=Config.TURNSTILE_SITE_KEY if _turnstile_enabled() else "",
+    )
+
+
+_CONTACT_OK_MSG = "Thanks — your message has been received. We’ll get back to you soon."
+
+
 @app.route("/contact", methods=["GET", "POST"])
 def contact():
     if request.method == "POST":
-        ip_hash = _hash_ip(_get_user_ip())
+        ip = _get_user_ip()
+        ip_hash = _hash_ip(ip)
 
-        # 1) Honeypot — bots often fill fields hidden from real visitors.
-        # Silent success so the bot thinks it worked and does not retry harder.
+        # 1) Honeypot — silent "success" so the bot learns nothing.
         if request.form.get("website", "").strip() or request.form.get("company_url", "").strip():
             app.logger.info("CONTACT honeypot tripped ip=%s", ip_hash)
-            flash("Thanks — your message has been received. We’ll get back to you soon.", "success")
+            flash(_CONTACT_OK_MSG, "success")
             return redirect(url_for("contact"))
 
-        # 2) Rate limit by IP (stops bulk spam even when email addresses change).
-        if _contact_rate_limited(ip_hash):
-            app.logger.warning("CONTACT rate-limited ip=%s", ip_hash)
-            flash("Too many messages from your network. Please try again in an hour.", "error")
-            return render_template("contact.html", contact_token=_make_contact_token())
+        # 2) Cheap global/IP limits first (before any work or network call).
+        hit = _contact_rate_limited(ip_hash)
+        if hit:
+            app.logger.warning("CONTACT rate-limited (%s) ip=%s", hit, ip_hash)
+            flash("Too many messages right now. Please try again later or email support@qalamstudio.xyz.", "error")
+            return _render_contact()
 
-        # 3) Timing / signed token — form must have been loaded a few seconds ago.
+        # 3) Signed, single-use, aged token.
         if not _contact_token_ok(request.form.get("contact_token", "")):
-            app.logger.info("CONTACT bad/missing token ip=%s", ip_hash)
+            app.logger.info("CONTACT bad/missing/replayed token ip=%s", ip_hash)
             flash("Please reload the page and try again.", "error")
-            return render_template("contact.html", contact_token=_make_contact_token())
+            return _render_contact()
 
-        name = request.form.get("name", "").strip()[:100]
-        email = request.form.get("email", "").strip()[:254]
-        phone = request.form.get("phone", "").strip()[:50]
+        # 4) CAPTCHA (only when Turnstile keys are configured).
+        if _turnstile_enabled() and not _turnstile_ok(request.form.get("cf-turnstile-response", ""), ip):
+            app.logger.info("CONTACT turnstile failed ip=%s", ip_hash)
+            flash("Please complete the verification check and try again.", "error")
+            return _render_contact()
+
+        name = _clean_line(request.form.get("name", ""), 100)
+        email = _clean_line(request.form.get("email", ""), 254)
+        phone = _clean_line(request.form.get("phone", ""), 50)
         category = request.form.get("category", "general").strip().lower()
-        message = request.form.get("message", "").strip()[:5000]
+        message = request.form.get("message", "").replace("\x00", "").strip()[:5000]
         allowed_categories = {"general", "support", "billing", "feature", "partnership"}
 
         if category not in allowed_categories:
             category = "general"
-        if not name or not email or "@" not in email or "." not in email.rsplit("@", 1)[-1]:
+        if not name or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]{2,}", email):
             flash("Please enter your name and a valid email address.", "error")
-            return render_template("contact.html", contact_token=_make_contact_token())
+            return _render_contact()
         if _is_disposable_email(email):
             flash("Please use a permanent email address (temporary / disposable addresses are not accepted).", "error")
-            return render_template("contact.html", contact_token=_make_contact_token())
+            return _render_contact()
         if len(message) < 10:
             flash("Please write a little more detail so we can help you.", "error")
-            return render_template("contact.html", contact_token=_make_contact_token())
+            return _render_contact()
 
-        # Record attempt only after basic validation passed (still counts toward limit).
-        _contact_rate_record(ip_hash)
+        # 5) Per-address limit, then content screening. Spam is dropped silently.
+        if _contact_rate_limited(ip_hash, email) == "email":
+            app.logger.info("CONTACT per-email limit email=%s", email)
+            flash(_CONTACT_OK_MSG, "success")
+            return redirect(url_for("contact"))
+        reason = _contact_looks_like_spam(name, email, message)
+        if reason:
+            app.logger.info("CONTACT spam dropped (%s) ip=%s", reason, ip_hash)
+            _contact_rate_record(ip_hash, email)  # still counts toward limits
+            flash(_CONTACT_OK_MSG, "success")
+            return redirect(url_for("contact"))
+
+        _contact_rate_record(ip_hash, email)
 
         admin_notified = _notify_contact_inquiry(name, email, category, message, phone)
-        # Automated acknowledgement for common inquiry types.
-        subject, reply = _contact_auto_reply(category, name)
-        _send_mailtrap_email(email, subject, text_body=reply)
+        # Auto-reply is opt-in (CONTACT_AUTO_REPLY=1): it let bots email strangers.
+        if Config.CONTACT_AUTO_REPLY:
+            subject, reply = _contact_auto_reply(category, name)
+            _send_mailtrap_email(email, subject, text_body=reply)
         if not admin_notified:
-            app.logger.error("CONTACT FORM: admin notification failed for inquiry from %s <%s>. Check MAILTRAP_API_KEY / CONTACT_FROM_EMAIL / ADMIN_EMAIL and Mailtrap domain verification. Full message logged above this line.", name, email)
-        flash("Thanks — your message has been received. We’ll get back to you soon.", "success")
+            app.logger.error("CONTACT FORM: admin notification failed for inquiry from %s <%s>. Check MAILTRAP_API_KEY / CONTACT_FROM_EMAIL / ADMIN_EMAIL and Mailtrap domain verification.", name, email)
+        flash(_CONTACT_OK_MSG, "success")
         return redirect(url_for("contact"))
 
-    return render_template("contact.html", contact_token=_make_contact_token())
+    return _render_contact()
 
 @app.route("/privacy")
 def privacy():
